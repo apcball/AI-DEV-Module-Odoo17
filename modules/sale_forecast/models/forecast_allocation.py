@@ -24,12 +24,12 @@ class ForecastAllocation(models.Model):
     plan_id = fields.Many2one("forecast.plan", required=True, index=True)
     plan_line_id = fields.Many2one(
         "forecast.line",
-        required=True,
         index=True,
         domain="[('plan_id', '=', plan_id)]",
     )
-    product_id = fields.Many2one(related="plan_line_id.product_id", store=True, readonly=True)
+    product_id = fields.Many2one("product.product", required=True, domain=[("sale_ok", "=", True)], index=True)
     allocated_qty = fields.Float(required=True, digits="Product Unit of Measure")
+    is_non_forecast = fields.Boolean(string="Non-Forecast", default=False)
 
     sale_order_id = fields.Many2one("sale.order", required=True, index=True)
     sale_order_line_id = fields.Many2one("sale.order.line", readonly=True, ondelete="set null")
@@ -61,16 +61,24 @@ class ForecastAllocation(models.Model):
         for rec in self:
             if rec.state == "cancel":
                 rec.actual_sold_qty = 0.0
-            elif rec.sale_order_id.state in ("sale", "done"):
+            elif rec.sale_order_id.state in ("sale", "done") and rec.sale_order_line_id:
                 rec.actual_sold_qty = rec.sale_order_line_id.qty_delivered or rec.sale_order_line_id.product_uom_qty
             else:
                 rec.actual_sold_qty = 0.0
 
-    @api.constrains("plan_id", "plan_line_id")
+    @api.onchange("plan_line_id")
+    def _onchange_plan_line_id(self):
+        for rec in self:
+            if rec.plan_line_id:
+                rec.product_id = rec.plan_line_id.product_id
+
+    @api.constrains("plan_id", "plan_line_id", "product_id", "is_non_forecast")
     def _check_plan_line_consistency(self):
         for rec in self:
             if rec.plan_line_id and rec.plan_id != rec.plan_line_id.plan_id:
                 raise ValidationError(_("Selected forecast line does not belong to selected forecast plan."))
+            if rec.plan_line_id and rec.product_id != rec.plan_line_id.product_id:
+                raise ValidationError(_("Selected forecast line product must match the allocation product."))
 
     @api.constrains("allocated_qty")
     def _check_allocated_qty_positive(self):
@@ -80,7 +88,7 @@ class ForecastAllocation(models.Model):
 
     @api.constrains("allocated_qty", "state", "plan_line_id")
     def _check_over_allocation(self):
-        for rec in self.filtered(lambda x: x.state != "cancel"):
+        for rec in self.filtered(lambda x: x.state != "cancel" and x.plan_line_id and not x.is_non_forecast):
             others = rec.plan_line_id.allocation_ids.filtered(
                 lambda a: a.id != rec.id and a.state != "cancel"
             )
@@ -102,6 +110,10 @@ class ForecastAllocation(models.Model):
         for vals in vals_list:
             if vals.get("name", _("New")) == _("New"):
                 vals["name"] = self.env["ir.sequence"].next_by_code("forecast.allocation") or _("New")
+            if vals.get("plan_line_id") and not vals.get("product_id"):
+                plan_line = self.env["forecast.line"].browse(vals["plan_line_id"])
+                vals["product_id"] = plan_line.product_id.id
+            vals.setdefault("is_non_forecast", False)
         allocations = super().create(vals_list)
         for rec in allocations:
             rec._create_or_update_sale_order_line()
@@ -126,7 +138,8 @@ class ForecastAllocation(models.Model):
             "product_uom_qty": self.allocated_qty,
             "price_unit": self.product_id.lst_price,
             "forecast_allocation_id": self.id,
-            "is_forecast_allocation": True,
+            "is_forecast_allocation": not self.is_non_forecast,
+            "is_non_forecast": self.is_non_forecast,
         }
 
         if self.sale_order_line_id and update_existing:
@@ -135,6 +148,8 @@ class ForecastAllocation(models.Model):
                 "name": self.product_id.display_name,
                 "product_uom_qty": self.allocated_qty,
                 "price_unit": self.product_id.lst_price,
+                "is_forecast_allocation": not self.is_non_forecast,
+                "is_non_forecast": self.is_non_forecast,
             })
         elif not self.sale_order_line_id:
             self.sale_order_line_id = self.env["sale.order.line"].create(line_vals)

@@ -9,6 +9,13 @@ class ForecastPlan(models.Model):
     _description = "Sales Forecast Plan"
     _inherit = ["mail.thread", "mail.activity.mixin"]
     _order = "start_date desc, id desc"
+    _sql_constraints = [
+        (
+            "forecast_plan_user_month_company_uniq",
+            "unique(user_id, start_date, company_id)",
+            "Only one forecast plan is allowed per user per month.",
+        )
+    ]
 
     name = fields.Char(
         string="Plan Reference",
@@ -16,6 +23,14 @@ class ForecastPlan(models.Model):
         copy=False,
         readonly=True,
         default=lambda self: _("New"),
+        tracking=True,
+    )
+    user_id = fields.Many2one(
+        "res.users",
+        string="Salesperson",
+        required=True,
+        default=lambda self: self.env.user,
+        index=True,
         tracking=True,
     )
     state = fields.Selection(
@@ -79,6 +94,7 @@ class ForecastPlan(models.Model):
         for vals in vals_list:
             if vals.get("name", _("New")) == _("New"):
                 vals["name"] = self.env["ir.sequence"].next_by_code("forecast.plan") or _("New")
+            vals.setdefault("user_id", self.env.user.id)
         return super().create(vals_list)
 
     def action_confirm(self):

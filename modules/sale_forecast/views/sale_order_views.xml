@@ -25,6 +25,7 @@
                             <field name="product_id"/>
                             <field name="allocated_qty"/>
                             <field name="actual_sold_qty"/>
+                            <field name="is_non_forecast" optional="hide"/>
                             <field name="state"/>
                         </tree>
                     </field>

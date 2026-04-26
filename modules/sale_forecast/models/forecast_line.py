@@ -47,6 +47,7 @@ class ForecastLine(models.Model):
         "forecast_qty",
         "allocation_ids.allocated_qty",
         "allocation_ids.state",
+        "allocation_ids.is_non_forecast",
         "allocation_ids.sale_order_line_id.product_uom_qty",
         "allocation_ids.sale_order_line_id.qty_delivered",
         "allocation_ids.sale_order_id.state",
@@ -57,7 +58,8 @@ class ForecastLine(models.Model):
             ("plan_line_id", "in", self.ids),
             ("state", "!=", "cancel"),
         ]):
-            grouped_alloc[alloc.plan_line_id.id]["allocated"] += alloc.allocated_qty
+            if not alloc.is_non_forecast:
+                grouped_alloc[alloc.plan_line_id.id]["allocated"] += alloc.allocated_qty
             if alloc.sale_order_id.state in ("sale", "done"):
                 grouped_alloc[alloc.plan_line_id.id]["actual"] += alloc.sale_order_line_id.qty_delivered or alloc.sale_order_line_id.product_uom_qty
 
