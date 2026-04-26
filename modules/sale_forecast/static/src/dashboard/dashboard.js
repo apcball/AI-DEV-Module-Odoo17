@@ -1,8 +1,8 @@
 /** @odoo-module **/
 
+import { registry } from "@web/core/registry";
 import { Component, onMounted, onPatched, onWillStart, onWillUnmount, useRef, useState } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { loadJS } from "@web/core/assets";
 import { Layout } from "@web/search/layout";
 
 export class SaleForecastDashboard extends Component {
@@ -42,7 +42,6 @@ export class SaleForecastDashboard extends Component {
         });
 
         onWillStart(async () => {
-            await loadJS("https://cdn.jsdelivr.net/npm/chart.js");
             await this.loadDashboard();
         });
 
@@ -53,14 +52,17 @@ export class SaleForecastDashboard extends Component {
 
     async loadDashboard() {
         this.state.loading = true;
-        const data = await this.orm.call("sale.forecast.dashboard", "get_dashboard_data", []);
-
-        this.state.kpi = data.kpi || this.state.kpi;
-        this.state.monthly = data.monthly || [];
-        this.state.products = data.products || [];
-        this.state.recent_plans = data.recent_plans || [];
-        this.state.recent_allocations = data.recent_allocations || [];
-        this.state.weekly = data.weekly || [];
+        try {
+            const data = await this.orm.call("sale.forecast.dashboard", "get_dashboard_data", []);
+            this.state.kpi = data.kpi || this.state.kpi;
+            this.state.monthly = data.monthly || [];
+            this.state.products = data.products || [];
+            this.state.recent_plans = data.recent_plans || [];
+            this.state.recent_allocations = data.recent_allocations || [];
+            this.state.weekly = data.weekly || [];
+        } catch (e) {
+            console.error("Failed to load dashboard data:", e);
+        }
         this.state.loading = false;
     }
 
@@ -76,10 +78,9 @@ export class SaleForecastDashboard extends Component {
     }
 
     renderCharts() {
-        if (this.state.loading || !window.Chart) {
+        if (this.state.loading) {
             return;
         }
-
         this.destroyCharts();
         this.renderMonthlyChart();
         this.renderProductChart();
@@ -87,10 +88,9 @@ export class SaleForecastDashboard extends Component {
 
     renderMonthlyChart() {
         const canvas = this.monthlyCanvas.el;
-        if (!canvas) {
+        if (!canvas || !window.Chart) {
             return;
         }
-
         const labels = this.state.monthly.map((row) => this.formatMonth(row.month));
         this.monthlyChart = new window.Chart(canvas, {
             type: "bar",
@@ -129,12 +129,10 @@ export class SaleForecastDashboard extends Component {
 
     renderProductChart() {
         const canvas = this.productCanvas.el;
-        if (!canvas) {
+        if (!canvas || !window.Chart) {
             return;
         }
-
         const palette = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#8b5cf6", "#f97316", "#14b8a6"];
-
         this.productChart = new window.Chart(canvas, {
             type: "doughnut",
             data: {
@@ -205,3 +203,6 @@ export class SaleForecastDashboard extends Component {
         await this.action.doAction("sale_forecast.action_forecast_allocation");
     }
 }
+
+// Register action directly in the same file
+registry.category("actions").add("sale_forecast_dashboard_action", SaleForecastDashboard);

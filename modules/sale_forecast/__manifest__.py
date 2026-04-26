@@ -21,7 +21,6 @@
             "sale_forecast/static/src/dashboard/dashboard.js",
             "sale_forecast/static/src/dashboard/dashboard.xml",
             "sale_forecast/static/src/dashboard/dashboard.scss",
-            "sale_forecast/static/src/dashboard_action.js",
         ],
     },
     "application": True,
