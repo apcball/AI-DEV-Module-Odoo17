@@ -254,6 +254,30 @@ Three receipt formats are available:
    - Validates the picking
 4. Order moves to **Done** state
 
+### Creating a Return
+
+1. Open completed order (state = Done)
+2. Click **Create Return**
+3. Return wizard opens:
+   - Select products to return
+   - Enter return quantity (full or partial)
+   - Add return reason (optional)
+4. Click **Create Return**
+5. System automatically:
+   - Creates return order linked to original
+   - Creates Credit Note (out_refund)
+   - Creates incoming picking for stock return
+   - Processes refund payment
+6. Return order moves to **Done** state
+
+### Return Features
+- **Full return**: Return all items from original order
+- **Partial return**: Return specific quantities
+- **Cash refund**: Refund to cash/bank journal
+- **Credit note**: Automatic credit note generation
+- **Stock return**: Incoming picking for warehouse
+- **Return tracking**: Track returned quantity per line
+
 ### Printing Receipt
 
 1. Open completed order
