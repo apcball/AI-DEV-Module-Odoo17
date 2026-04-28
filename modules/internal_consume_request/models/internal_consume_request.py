@@ -173,7 +173,7 @@ class InternalConsumeRequest(models.Model):
     def _compute_barcode_display(self):
         for record in self:
             if record.name and record.name != 'New':
-                record.barcode_display = f'<img src="/report/barcode/?barcode_type=Code128&amp;value={record.name}&amp;width=600&amp;height=100" style="width: 250px; height: 50px;" alt="Barcode"/>'
+                record.barcode_display = f'<img src="/report/barcode/?barcode_type=QR&amp;value={record.name}&amp;width=600&amp;height=600" style="width: 150px; height: 150px;" alt="QR Code"/>'
             else:
                 record.barcode_display = False
     
@@ -475,7 +475,7 @@ class InternalConsumeRequest(models.Model):
             
         self.state = 'partial_pick'
         self.message_post(
-            body=_('Issuing process started by %s') % self.env.user.name,
+            body=_('เริ่มกระบวนการจ่ายของโดย %s') % self.env.user.name,
             message_type='notification',
             subtype_xmlid='mail.mt_note'
         )
@@ -483,7 +483,7 @@ class InternalConsumeRequest(models.Model):
     def _check_signature_required(self):
         self.ensure_one()
         if not self.issuer_signature or not self.receiver_signature:
-            raise UserError(_('Both Issuer and Receiver signatures are required before confirming the issue.'))
+            raise UserError(_('ต้องมีลายเซ็นทั้งผู้จ่ายและผู้รับก่อนยืนยันการจ่ายของ.'))
 
     def action_confirm_issue(self):
         """Confirm the issue process, validate signatures and quantities, create picking"""
@@ -495,7 +495,7 @@ class InternalConsumeRequest(models.Model):
         
         issued_lines = self.line_ids.filtered(lambda l: l.issued_qty > 0)
         if not issued_lines:
-            raise UserError(_('No items have been issued. Please issue at least one item or cancel the request.'))
+            raise UserError(_('ยังไม่มีรายการใดถูกจ่าย. กรุณาจ่ายของอย่างน้อย 1 รายการ หรือยกเลิกคำขอ.'))
             
         # Check if issued quantity is valid against available quantity
         for line in issued_lines:
@@ -517,10 +517,10 @@ class InternalConsumeRequest(models.Model):
         if all_fulfilled:
             self.state = 'done'
         else:
-            self.state = 'partial'
+            self.state = 'partial_pick'
             
         self.message_post(
-            body=_('Issue confirmed. Status: %s. Signatures completed.') % self.state,
+            body=_('ยืนยันการจ่ายของเรียบร้อย. สถานะ: %s. เซ็นชื่อเสร็จสิ้น.') % self.state,
             message_type='notification',
             subtype_xmlid='mail.mt_note'
         )

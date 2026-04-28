@@ -72,13 +72,13 @@
                                 invisible="state != 'to_approve'"
                                 groups="internal_consume_request.group_internal_consume_manager"/>
                         <button name="action_start_issue"
-                                string="Start Issue"
+                                string="เริ่มจ่ายของ"
                                 type="object"
                                 class="oe_highlight"
                                 invisible="state != 'approved'"
                                 groups="internal_consume_request.group_internal_consume_stock"/>
                         <button name="action_confirm_issue"
-                                string="Confirm Issue"
+                                string="ยืนยันการจ่ายของ"
                                 type="object"
                                 class="oe_highlight"
                                 invisible="state != 'partial_pick'"
@@ -123,8 +123,8 @@
                                     type="action" 
                                     class="oe_stat_button" 
                                     icon="fa-print"
-                                    string="Issue Slip"
-                                    invisible="state not in ('issuing', 'partial', 'done')"/>
+                                    string="ใบจ่ายของ"
+                                    invisible="state not in ('partial_pick', 'done')"/>
                         </div>
                         <div class="oe_title w-100">
                             <div class="d-flex justify-content-between align-items-center w-100">
@@ -191,7 +191,7 @@
                                     <field name="reason_for_requisition" placeholder="กรุณาระบุเหตุผลในการขอเบิกวัสดุ/อุปกรณ์..."/>
                                 </group>
                             </page>
-                            <page string="Issue Details" name="issue_details" invisible="state not in ('partial_pick', 'done')">
+                            <page string="รายละเอียดการจ่ายของ" name="issue_details" invisible="state not in ('partial_pick', 'done')">
                                 <group>
                                     <group>
                                         <field name="issued_by"/>
@@ -202,10 +202,10 @@
                                     </group>
                                 </group>
                                 <group>
-                                    <group string="Issuer Signature">
+                                    <group string="ลายเซ็นผู้จ่าย">
                                         <field name="issuer_signature" widget="signature" readonly="state in ('partial_pick', 'done')"/>
                                     </group>
-                                    <group string="Receiver Signature">
+                                    <group string="ลายเซ็นผู้รับ">
                                         <field name="receiver_signature" widget="signature" readonly="state in ('partial_pick', 'done')"/>
                                     </group>
                                 </group>
@@ -246,6 +246,16 @@
                                 <group>
                                     <field name="notes" placeholder="Additional notes..."/>
                                 </group>
+                            </page>
+                            <page string="จ่ายของ (QR Scan)" name="qr_scan" invisible="state not in ('approved', 'partial_pick')">
+                                <div class="oe_title">
+                                    <h2>QR Code Scanner</h2>
+                                    <p>สแกน QR Code เพื่อตรวจสอบและจ่ายของ</p>
+                                </div>
+                                <div class="o_barcode_scanner">
+                                    <div id="qr-reader" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
+                                    <div id="qr-result" style="text-align: center; margin-top: 20px;"></div>
+                                </div>
                             </page>
                         </notebook>
                     </sheet>
