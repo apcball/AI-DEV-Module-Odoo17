@@ -1,0 +1,15 @@
+{
+  "model": "zai/glm-4.6",
+  "permissions": null,
+  "maxTokens": null,
+  "maxIterations": null,
+  "thinkingBudget": null,
+  "searchEngine": null,
+  "allowedTools": null,
+  "disallowedTools": null,
+  "windowWidth": null,
+  "windowHeight": null,
+  "teamEnabled": true,
+  "showRawResponse": null,
+  "kms": null
+}

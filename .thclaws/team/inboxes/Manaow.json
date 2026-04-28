@@ -1,0 +1,34 @@
+[
+  {
+    "id": "f2faab6e-f641-47c7-b5a6-324b4586a94b",
+    "from": "lead",
+    "text": "Rename the Odoo module from \"sale_forecast\" to \"Manaow\" by updating all references:\n\n1. Update __manifest__.py: Replace all \"sale_forecast\" paths with \"manaow\" in the data and assets sections\n2. Update security XML files: Replace all \"sale_forecast\" group references with \"manaow\"\n3. Update model files: Replace all \"sale_forecast\" action refs with \"manaow\"\n4. Update views: Replace all \"sale_forecast\" references with \"manaow\"\n5. Update static files: Replace all \"sale_forecast\" references with \"manaow\"\n6. Update test files: Replace all \"sale_forecast\" references with \"manaow\"\n7. Rename files: Rename security/sale_forecast_security.xml to security/manaow_security.xml and views/sale_forecast_dashboard.xml to views/manaow_dashboard.xml\n\nReport completion when all references are updated.",
+    "timestamp": 1777337507,
+    "read": true,
+    "summary": "Rename the Odoo module from \"sale_forecast\" to \"Manaow\""
+  },
+  {
+    "id": "d660c4dc-13e1-4779-8887-02b5c2e8d7a7",
+    "from": "lead",
+    "text": "You are a coding agent. Rename the Odoo module from \"sale_forecast\" to \"Manaow\" by updating all references:\n\n1. Update __manifest__.py: Replace all \"sale_forecast\" paths with \"manaow\" in the data and assets sections\n2. Update security XML files: Replace all \"sale_forecast\" group references with \"manaow\"\n3. Update model files: Replace all \"sale_forecast\" action refs with \"manaow\"\n4. Update views: Replace all \"sale_forecast\" references with \"manaow\"\n5. Update static files: Replace all \"sale_forecast\" references with \"manaow\"\n6. Update test files: Replace all \"sale_forecast\" references with \"manaow\"\n7. Rename files: Rename security/sale_forecast_security.xml to security/manaow_security.xml and views/sale_forecast_dashboard.xml to views/manaow_dashboard.xml\n\nReport completion when all references are updated.",
+    "timestamp": 1777337661,
+    "read": true,
+    "summary": "You are a coding agent. Rename the Odoo"
+  },
+  {
+    "id": "388c92dd-90d3-4e26-b18f-5fea25a157fd",
+    "from": "user",
+    "text": "/providers",
+    "timestamp": 1777337698,
+    "read": true,
+    "summary": "/providers"
+  },
+  {
+    "id": "39f7d408-3319-4180-b142-a6b58723d948",
+    "from": "lead",
+    "text": "Reverse the renaming: Change the module back from \"Manaow\" to \"sale_forecast\". Revert all the changes you made:\n\n1. Update __manifest__.py: Replace all \"manaow\" paths back to \"sale_forecast\"\n2. Update security XML files: Change all group references from \"manaow\" back to \"sale_forecast\"\n3. Update model files: Change action refs back to \"sale_forecast\"\n4. Update views: Change all references back to \"sale_forecast\"\n5. Update static files: Change all references back to \"sale_forecast\"\n6. Update test files: Change group refs back to \"sale_forecast\"\n7. Rename files back: security/manaow_security.xml → security/sale_forecast_security.xml, views/manaow_dashboard.xml → views/sale_forecast_dashboard.xml, models/manaow_dashboard.py → models/sale_forecast_dashboard.py\n\nReport completion when everything is reverted.",
+    "timestamp": 1777337843,
+    "read": true,
+    "summary": "Reverse the renaming: Change the module back from"
+  }
+]

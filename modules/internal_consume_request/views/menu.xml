@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Main Menu -->
+        <menuitem id="menu_internal_consume_root"
+                  name="Stock Requests"
+                  sequence="50"
+                  web_icon="internal_consume_request,static/description/icon.png"
+                  groups="group_internal_consume_user"/>
+
+        <!-- Submenu: Requests -->
+        <menuitem id="menu_internal_consume_requests"
+                  name="Requests"
+                  parent="menu_internal_consume_root"
+                  sequence="10"/>
+
+        <menuitem id="menu_internal_consume_request_all"
+                  name="All Requests"
+                  parent="menu_internal_consume_requests"
+                  action="action_internal_consume_request"
+                  sequence="10"/>
+
+        <menuitem id="menu_internal_consume_request_to_approve"
+                  name="To Approve"
+                  parent="menu_internal_consume_requests"
+                  action="action_internal_consume_request_to_approve"
+                  sequence="20"
+                  groups="group_internal_consume_manager"/>
+
+        <!-- Submenu under Inventory (alternative) -->
+        <menuitem id="menu_inventory_internal_consume"
+                  name="Stock Requests"
+                  parent="stock.menu_stock_root"
+                  action="action_internal_consume_request"
+                  sequence="99"
+                  groups="group_internal_consume_user"/>
+
+        <!-- Client Action for Barcode -->
+        <record id="action_internal_consume_barcode" model="ir.actions.client">
+            <field name="name">Internal Consume Barcode</field>
+            <field name="tag">internal_consume_request.barcode_client_action</field>
+            <field name="target">fullscreen</field>
+        </record>
+
+        <!-- Menu for Barcode App as a Root Icon -->
+        <menuitem id="menu_inventory_barcode_consume"
+                  name="Barcode Issue"
+                  web_icon="internal_consume_request,static/description/icon.png"
+                  action="action_internal_consume_barcode"
+                  sequence="150"
+                  groups="group_internal_consume_stock"/>
+
+    </data>
+</odoo>

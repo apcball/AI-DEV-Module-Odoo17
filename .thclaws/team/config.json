@@ -1,0 +1,18 @@
+{
+  "name": "odoo-module-team",
+  "description": "Team for Odoo module development",
+  "created_at": 1777337653,
+  "lead_agent_id": "lead",
+  "members": [
+    {
+      "name": "Manaow",
+      "prompt": "You are a coding agent. Handle all code changes including renaming modules, updating references, and modifying manifest files.",
+      "role": "coding agent",
+      "color": null,
+      "cwd": null,
+      "is_active": true,
+      "tmux_pane_id": null,
+      "isolation": null
+    }
+  ]
+}
