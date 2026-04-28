@@ -40,10 +40,11 @@ class PosLitePaymentWizard(models.TransientModel):
         if order.state != 'draft':
             raise UserError(_('Only draft orders can be paid.'))
         default_journal = order._get_default_payment_journal()
+        payment_amount = -abs(self.amount) if order.is_return else self.amount
         payment_vals = {
             'order_id': order.id,
             'payment_method': self.payment_method,
-            'amount': self.amount,
+            'amount': payment_amount,
             'journal_id': self.journal_id.id or (default_journal.id if default_journal else False),
             'note': self.note,
         }

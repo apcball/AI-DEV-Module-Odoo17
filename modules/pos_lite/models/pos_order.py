@@ -58,25 +58,30 @@ class PosLiteOrder(models.Model):
     amount_change = fields.Monetary(compute='_compute_amounts', store=True)
     invoice_id = fields.Many2one('account.move', readonly=True, copy=False)
     picking_id = fields.Many2one('stock.picking', readonly=True, copy=False)
+    is_return = fields.Boolean(default=False, copy=False, tracking=True)
+    return_of_order_id = fields.Many2one('pos.lite.order', readonly=True, copy=False, tracking=True, index=True)
+    return_order_ids = fields.One2many('pos.lite.order', 'return_of_order_id', string='Return Orders')
+    return_reason = fields.Text(copy=False)
     note = fields.Text()
 
     _sql_constraints = [
         ('name_unique', 'unique(name)', 'Order number must be unique.'),
     ]
 
-    @api.depends('line_ids.price_subtotal', 'line_ids.price_tax', 'payment_ids.amount')
+    @api.depends('line_ids.price_subtotal', 'line_ids.price_tax', 'payment_ids.amount', 'is_return')
     def _compute_amounts(self):
         for order in self:
             untaxed = sum(order.line_ids.mapped('price_subtotal'))
             tax = sum(order.line_ids.mapped('price_tax'))
             paid = sum(order.payment_ids.mapped('amount'))
             total = untaxed + tax
+            paid_display = abs(paid) if order.is_return else paid
             order.amount_untaxed = untaxed
             order.amount_tax = tax
             order.amount_total = total
-            order.amount_paid = paid
-            order.amount_residual = max(total - paid, 0.0)
-            order.amount_change = max(paid - total, 0.0)
+            order.amount_paid = paid_display
+            order.amount_residual = max(total - paid_display, 0.0)
+            order.amount_change = max(paid_display - total, 0.0)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -178,7 +183,7 @@ class PosLiteOrder(models.Model):
                 'product_uom_id': line.product_id.uom_id.id,
             }))
         return {
-            'move_type': 'out_invoice',
+            'move_type': 'out_refund' if self.is_return else 'out_invoice',
             'company_id': self.company_id.id,
             'partner_id': partner.id,
             'invoice_origin': self.name,
@@ -190,9 +195,14 @@ class PosLiteOrder(models.Model):
     def _prepare_picking_vals(self):
         self.ensure_one()
         partner = self._get_or_create_customer_partner()
-        picking_type = self.warehouse_id.out_type_id
-        if not picking_type:
-            raise UserError(_('No outgoing picking type found for warehouse %s.') % self.warehouse_id.display_name)
+        if self.is_return:
+            picking_type = self.warehouse_id.in_type_id
+            if not picking_type:
+                raise UserError(_('No incoming picking type found for warehouse %s.') % self.warehouse_id.display_name)
+        else:
+            picking_type = self.warehouse_id.out_type_id
+            if not picking_type:
+                raise UserError(_('No outgoing picking type found for warehouse %s.') % self.warehouse_id.display_name)
         customer_location = self.env.ref('stock.stock_location_customers', raise_if_not_found=False)
         if not customer_location:
             customer_location = self.env['stock.location'].search([('usage', '=', 'customer')], limit=1)
@@ -200,21 +210,23 @@ class PosLiteOrder(models.Model):
             raise UserError(_('No customer location could be found for stock delivery.'))
         moves = []
         for line in self.line_ids.filtered(lambda l: l.product_id.type != 'service' and l.qty > 0):
+            location_id = customer_location.id if self.is_return else self.warehouse_id.lot_stock_id.id
+            location_dest_id = self.warehouse_id.lot_stock_id.id if self.is_return else customer_location.id
             moves.append((0, 0, {
                 'name': line.description or line.product_id.display_name,
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.qty,
                 'product_uom': line.product_id.uom_id.id,
-                'location_id': self.warehouse_id.lot_stock_id.id,
-                'location_dest_id': customer_location.id,
+                'location_id': location_id,
+                'location_dest_id': location_dest_id,
             }))
         return {
             'picking_type_id': picking_type.id,
             'partner_id': partner.id,
             'origin': self.name,
             'company_id': self.company_id.id,
-            'location_id': self.warehouse_id.lot_stock_id.id,
-            'location_dest_id': customer_location.id,
+            'location_id': self.warehouse_id.lot_stock_id.id if not self.is_return else customer_location.id,
+            'location_dest_id': customer_location.id if not self.is_return else self.warehouse_id.lot_stock_id.id,
             'move_ids_without_package': moves,
         }
 
@@ -264,7 +276,10 @@ class PosLiteOrder(models.Model):
                 raise UserError(_('Please add at least one order line.'))
             if len(order.payment_ids) != 1:
                 raise UserError(_('Exactly one payment is required before processing the order.'))
-            if float_compare(order.amount_paid, order.amount_total, precision_rounding=order.currency_id.rounding) < 0:
+            paid_amount = abs(sum(order.payment_ids.mapped('amount')))
+            if float_compare(paid_amount, order.amount_total, precision_rounding=order.currency_id.rounding) < 0:
+                if order.is_return:
+                    raise UserError(_('Refund payment must cover the full return total before the documents can be created.'))
                 raise UserError(_('Payment must cover the full total before stock and invoice can be created.'))
             if not order.partner_id:
                 order.partner_id = order._get_or_create_customer_partner().id
@@ -277,7 +292,24 @@ class PosLiteOrder(models.Model):
                 order.picking_id = picking.id
                 order._process_stock_picking(picking)
             order.state = 'paid'
+            if order.is_return:
+                order.action_done()
         return True
+
+    def action_create_return(self):
+        self.ensure_one()
+        if self.state != 'done':
+            raise UserError(_('Only completed orders can be returned.'))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Create Return'),
+            'res_model': 'pos.lite.return.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_order_id': self.id,
+            },
+        }
 
     def action_done(self):
         for order in self:
@@ -315,7 +347,7 @@ class PosLiteOrder(models.Model):
             raise UserError(_('No invoice has been created yet.'))
         return {
             'type': 'ir.actions.act_window',
-            'name': _('Invoice'),
+            'name': _('Credit Note') if self.is_return else _('Invoice'),
             'res_model': 'account.move',
             'view_mode': 'form',
             'res_id': self.invoice_id.id,
@@ -361,9 +393,20 @@ class PosLiteOrderLine(models.Model):
     qty = fields.Float(default=1.0)
     price_unit = fields.Monetary(required=True)
     discount = fields.Float(default=0.0)
+    returned_from_line_id = fields.Many2one('pos.lite.order.line', copy=False, index=True)
+    return_line_ids = fields.One2many('pos.lite.order.line', 'returned_from_line_id', string='Return Lines')
+    returned_qty = fields.Float(compute='_compute_returned_qty', store=False)
+    available_return_qty = fields.Float(compute='_compute_returned_qty', store=False)
     price_subtotal = fields.Monetary(compute='_compute_amounts', store=True)
     price_tax = fields.Monetary(compute='_compute_amounts', store=True)
     price_total = fields.Monetary(compute='_compute_amounts', store=True)
+
+    @api.depends('return_line_ids.qty')
+    def _compute_returned_qty(self):
+        for line in self:
+            returned_qty = sum(line.return_line_ids.mapped('qty'))
+            line.returned_qty = returned_qty
+            line.available_return_qty = max(line.qty - returned_qty, 0.0)
 
     @api.depends('qty', 'price_unit', 'discount', 'product_id', 'order_id.partner_id', 'order_id.pricelist_id')
     def _compute_amounts(self):

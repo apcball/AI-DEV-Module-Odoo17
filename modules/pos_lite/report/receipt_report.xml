@@ -54,6 +54,7 @@
                         <strong t-esc="o.company_id.name"/>
                         <div t-if="o.company_id.partner_id.street" t-esc="o.company_id.partner_id.street"/>
                         <div t-if="o.company_id.vat">Tax ID: <span t-esc="o.company_id.vat"/></div>
+                        <div t-if="o.is_return" style="margin-top: 4px; font-weight: bold; color: #b00020;">RETURN / REFUND</div>
                     </div>
                     <div style="border-top: 1px dashed #333; border-bottom: 1px dashed #333; padding: 6px 0; margin-bottom: 8px;">
                         <div>Date: <span t-esc="o.create_date.strftime('%Y-%m-%d %H:%M') if o.create_date else ''"/></div>
@@ -87,8 +88,8 @@
                     <table style="width: 100%; margin-bottom: 8px;">
                         <tr><td>Subtotal</td><td class="text-end"><span t-esc="formatLang(o.amount_untaxed, currency_obj=o.currency_id)"/></td></tr>
                         <tr><td>VAT / Tax</td><td class="text-end"><span t-esc="formatLang(o.amount_tax, currency_obj=o.currency_id)"/></td></tr>
-                        <tr><td><strong>Total</strong></td><td class="text-end"><strong t-esc="formatLang(o.amount_total, currency_obj=o.currency_id)"/></td></tr>
-                        <tr><td>Paid</td><td class="text-end"><span t-esc="formatLang(o.amount_paid, currency_obj=o.currency_id)"/></td></tr>
+                        <tr><td><strong t-esc="'Refund Total' if o.is_return else 'Total'"/></td><td class="text-end"><strong t-esc="formatLang(o.amount_total, currency_obj=o.currency_id)"/></td></tr>
+                        <tr><td><span t-esc="'Refund Paid' if o.is_return else 'Paid'"/></td><td class="text-end"><span t-esc="formatLang(o.amount_paid, currency_obj=o.currency_id)"/></td></tr>
                         <tr><td>Change</td><td class="text-end"><span t-esc="formatLang(o.amount_change, currency_obj=o.currency_id)"/></td></tr>
                     </table>
                     <div t-if="o.note" style="margin: 8px 0;">

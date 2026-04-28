@@ -41,5 +41,8 @@ class PosLitePayment(models.Model):
     @api.constrains('amount')
     def _check_amount(self):
         for payment in self:
-            if payment.amount <= 0:
+            if payment.order_id and payment.order_id.is_return:
+                if payment.amount >= 0:
+                    raise ValidationError(_('Refund payment amount must be less than zero.'))
+            elif payment.amount <= 0:
                 raise ValidationError(_('Payment amount must be greater than zero.'))

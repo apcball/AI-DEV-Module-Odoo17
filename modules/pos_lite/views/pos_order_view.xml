@@ -4,7 +4,7 @@
         <field name="name">pos.lite.order.tree</field>
         <field name="model">pos.lite.order</field>
         <field name="arch" type="xml">
-            <tree decoration-success="state == 'paid'" decoration-muted="state == 'cancelled'">
+            <tree decoration-success="state == 'paid'" decoration-muted="state == 'cancelled'" decoration-danger="is_return">
                 <field name="name"/>
                 <field name="state"/>
                 <field name="channel"/>
@@ -13,6 +13,8 @@
                 <field name="amount_total"/>
                 <field name="amount_paid"/>
                 <field name="amount_change"/>
+                <field name="is_return" invisible="1"/>
+                <field name="return_of_order_id"/>
                 <field name="invoice_id"/>
                 <field name="picking_id"/>
             </tree>
@@ -32,6 +34,7 @@
                 <filter string="Paid" name="paid" domain="[('state', '=', 'paid')]"/>
                 <filter string="Done" name="done" domain="[('state', '=', 'done')]"/>
                 <filter string="Cancelled" name="cancelled" domain="[('state', '=', 'cancelled')]"/>
+                <filter string="Returns" name="returns" domain="[('is_return', '=', True)]"/>
                 <group expand="0" string="Group By">
                     <filter string="Channel" name="group_channel" context="{'group_by': 'channel'}"/>
                     <filter string="Warehouse" name="group_warehouse" context="{'group_by': 'warehouse_id'}"/>
@@ -50,6 +53,7 @@
                     <button name="action_register_payment" type="object" string="Register Payment" class="oe_highlight" invisible="state != 'draft'"/>
                     <button name="action_process_order" type="object" string="Process Order" invisible="state != 'draft'"/>
                     <button name="action_done" type="object" string="Mark Done" invisible="state != 'paid'"/>
+                    <button name="action_create_return" type="object" string="Create Return" class="btn-secondary" invisible="state != 'done' or is_return"/>
                     <button name="action_cancel" type="object" string="Cancel" invisible="state == 'cancelled'"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,paid,done,cancelled"/>
                 </header>
@@ -84,6 +88,13 @@
                             <field name="warehouse_id"/>
                             <field name="pricelist_id"/>
                             <field name="company_id" invisible="1"/>
+                            <field name="is_return" invisible="1"/>
+                        </group>
+                    </group>
+                    <group invisible="not is_return">
+                        <group string="Return Info">
+                            <field name="return_of_order_id" readonly="1"/>
+                            <field name="return_reason" readonly="1"/>
                         </group>
                     </group>
                     <notebook>

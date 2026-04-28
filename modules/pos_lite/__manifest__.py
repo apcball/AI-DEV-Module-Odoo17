@@ -31,6 +31,7 @@ Creates invoice, stock picking, and printable receipt from a lightweight backend
         'views/pos_config_view.xml',
         'views/menu.xml',
         'wizard/payment_wizard_view.xml',
+        'wizard/return_wizard_view.xml',
     ],
     'assets': {},
     'application': True,
