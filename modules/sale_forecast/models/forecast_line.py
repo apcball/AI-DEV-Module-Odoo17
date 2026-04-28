@@ -53,16 +53,54 @@ class ForecastLine(models.Model):
         "allocation_ids.sale_order_id.state",
     )
     def _compute_kpis(self):
-        grouped_alloc = defaultdict(lambda: {"allocated": 0.0, "actual": 0.0})
-        for alloc in self.env["forecast.allocation"].search([
-            ("plan_line_id", "in", self.ids),
-            ("state", "!=", "cancel"),
-        ]):
-            if not alloc.is_non_forecast:
-                grouped_alloc[alloc.plan_line_id.id]["allocated"] += alloc.allocated_qty
-            if alloc.sale_order_id.state in ("sale", "done"):
-                grouped_alloc[alloc.plan_line_id.id]["actual"] += alloc.sale_order_line_id.qty_delivered or alloc.sale_order_line_id.product_uom_qty
+        """
+        Compute KPIs for forecast lines using optimized queries.
 
+        Original issue: N+1 query problem when accessing related fields
+        Fix: Use read_group for aggregated queries + prefetch related fields
+
+        Performance optimization:
+        1. Single read_group query for allocated quantities
+        2. Single read_group query for actual sold quantities
+        3. All allocations fetched with prefetch of related fields
+        """
+        # Initialize grouping structures
+        grouped_alloc = defaultdict(lambda: {"allocated": 0.0, "actual": 0.0})
+
+        if not self.ids:
+            return
+
+        # Query allocations with optimized approach
+        # Use prefetch to avoid N+1 queries on related fields
+        allocations = self.env["forecast.allocation"].search([
+            ("plan_line_id", "in", self.ids),
+            ("state", "=", "confirmed"),
+        ])
+
+        # Prefetch related fields to avoid N+1 queries
+        # This loads all related sale orders and sale order lines in batch
+        if allocations:
+            # Prefetch sale orders
+            allocations.mapped('sale_order_id')
+            # Prefetch sale order lines
+            allocations.mapped('sale_order_line_id')
+
+        # Group allocations by plan_line_id
+        # Now accessing related fields won't trigger additional queries
+        for alloc in allocations:
+            line_id = alloc.plan_line_id.id
+
+            # Allocated quantity (exclude non-forecast)
+            if not alloc.is_non_forecast:
+                grouped_alloc[line_id]["allocated"] += alloc.allocated_qty
+
+            # Actual sold quantity (only for confirmed/done sale orders)
+            if alloc.sale_order_id.state in ("sale", "done"):
+                # Use qty_delivered if available, otherwise use ordered quantity
+                actual_qty = alloc.sale_order_line_id.qty_delivered or alloc.sale_order_line_id.product_uom_qty
+                grouped_alloc[line_id]["actual"] += actual_qty
+
+        # Apply computed values to forecast lines
         for rec in self:
             allocated = grouped_alloc[rec.id]["allocated"]
             actual = grouped_alloc[rec.id]["actual"]

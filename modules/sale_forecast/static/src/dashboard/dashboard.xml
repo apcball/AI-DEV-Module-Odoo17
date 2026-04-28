@@ -8,7 +8,8 @@
                         <h2 class="mb-1">Sales Forecast Dashboard</h2>
                         <p class="text-muted mb-0">Real-time planning, allocation, and sales accuracy overview.</p>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="month" class="form-control" style="width: 150px;" t-model="state.target_month" t-on-change="onMonthChange"/>
                         <button class="btn btn-outline-primary" t-on-click="openPlans">
                             <i class="fa fa-folder-open me-1"/> Forecast Plans
                         </button>

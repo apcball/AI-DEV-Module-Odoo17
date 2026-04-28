@@ -4,6 +4,7 @@ import { registry } from "@web/core/registry";
 import { Component, onMounted, onPatched, onWillStart, onWillUnmount, useRef, useState } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { Layout } from "@web/search/layout";
+import { loadJS } from "@web/core/assets";
 
 export class SaleForecastDashboard extends Component {
     static template = "sale_forecast.SaleForecastDashboard";
@@ -21,6 +22,7 @@ export class SaleForecastDashboard extends Component {
 
         this.state = useState({
             loading: true,
+            target_month: this.getCurrentMonth(),
             display: {
                 controlPanel: {},
             },
@@ -42,6 +44,7 @@ export class SaleForecastDashboard extends Component {
         });
 
         onWillStart(async () => {
+            await loadJS("/web/static/lib/Chart/Chart.js");
             await this.loadDashboard();
         });
 
@@ -50,10 +53,21 @@ export class SaleForecastDashboard extends Component {
         onWillUnmount(() => this.destroyCharts());
     }
 
+    getCurrentMonth() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        return `${year}-${month}`;
+    }
+
+    async onMonthChange(ev) {
+        await this.loadDashboard();
+    }
+
     async loadDashboard() {
         this.state.loading = true;
         try {
-            const data = await this.orm.call("sale.forecast.dashboard", "get_dashboard_data", []);
+            const data = await this.orm.call("sale.forecast.dashboard", "get_dashboard_data", [this.state.target_month]);
             this.state.kpi = data.kpi || this.state.kpi;
             this.state.monthly = data.monthly || [];
             this.state.products = data.products || [];
@@ -203,6 +217,3 @@ export class SaleForecastDashboard extends Component {
         await this.action.doAction("sale_forecast.action_forecast_allocation");
     }
 }
-
-// Register action directly in the same file
-registry.category("actions").add("sale_forecast_dashboard_action", SaleForecastDashboard);

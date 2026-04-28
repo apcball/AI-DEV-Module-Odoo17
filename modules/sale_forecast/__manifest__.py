@@ -9,6 +9,7 @@
     "data": [
         "security/sale_forecast_security.xml",
         "security/ir.model.access.csv",
+        "security/forecast_record_rules.xml",
         "data/sequence_data.xml",
         "views/forecast_plan_views.xml",
         "views/forecast_allocation_views.xml",
@@ -19,6 +20,7 @@
     "assets": {
         "web.assets_backend": [
             "sale_forecast/static/src/dashboard/dashboard.js",
+            "sale_forecast/static/src/dashboard_action.js",
             "sale_forecast/static/src/dashboard/dashboard.xml",
             "sale_forecast/static/src/dashboard/dashboard.scss",
         ],

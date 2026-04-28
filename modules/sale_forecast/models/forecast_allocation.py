@@ -21,18 +21,19 @@ class ForecastAllocation(models.Model):
         tracking=True,
     )
 
-    plan_id = fields.Many2one("forecast.plan", required=True, index=True)
+    plan_id = fields.Many2one("forecast.plan", required=True, index=True, ondelete="cascade")
     plan_line_id = fields.Many2one(
         "forecast.line",
         index=True,
         domain="[('plan_id', '=', plan_id)]",
+        ondelete="set null",
     )
     product_id = fields.Many2one("product.product", required=True, domain=[("sale_ok", "=", True)], index=True)
     allocated_qty = fields.Float(required=True, digits="Product Unit of Measure")
     is_non_forecast = fields.Boolean(string="Non-Forecast", default=False)
 
     sale_order_id = fields.Many2one("sale.order", required=True, index=True)
-    sale_order_line_id = fields.Many2one("sale.order.line", readonly=True, ondelete="set null")
+    sale_order_line_id = fields.Many2one("sale.order.line", readonly=True, ondelete="restrict")
     customer_id = fields.Many2one(related="sale_order_id.partner_id", store=True, readonly=True)
     salesperson_id = fields.Many2one(related="sale_order_id.user_id", store=True, readonly=True)
     order_date = fields.Datetime(related="sale_order_id.date_order", store=True, readonly=True)
@@ -79,6 +80,62 @@ class ForecastAllocation(models.Model):
                 raise ValidationError(_("Selected forecast line does not belong to selected forecast plan."))
             if rec.plan_line_id and rec.product_id != rec.plan_line_id.product_id:
                 raise ValidationError(_("Selected forecast line product must match the allocation product."))
+
+    @api.constrains("sale_order_id", "sale_order_line_id")
+    def _check_sale_order_line_consistency(self):
+        """
+        Ensure sale_order_line_id belongs to sale_order_id.
+
+        This constraint ensures data integrity when ondelete="restrict" is used.
+        Since sale_order_line_id cannot be deleted while allocations reference it,
+        this prevents orphaned allocations if the relationship is manually broken.
+        """
+        for rec in self:
+            if rec.sale_order_line_id and rec.sale_order_line_id.order_id != rec.sale_order_id:
+                raise ValidationError(
+                    _(
+                        "Sale order line '%s' does not belong to sale order '%s'. "
+                        "Please ensure the allocation references the correct sale order line."
+                    )
+                    % (rec.sale_order_line_id.display_name, rec.sale_order_id.name)
+                )
+
+    @api.constrains("plan_id", "sale_order_id")
+    def _check_cross_user_allocation(self):
+        """
+        Prevent cross-user allocations.
+
+        Ensure that sale order and forecast plan belong to the same user.
+        This prevents users from allocating to other users' forecast plans.
+
+        Business Logic:
+        - Salesperson should allocate to their own forecast plan
+        - Prevents unauthorized access to other users' forecasts
+        - Ensures proper accountability and tracking
+        """
+        for rec in self:
+            if rec.plan_id and rec.sale_order_id:
+                so_user = rec.sale_order_id.user_id
+                plan_user = rec.plan_id.user_id
+
+                if so_user and plan_user and so_user != plan_user:
+                    raise ValidationError(
+                        _(
+                            "Cannot allocate sale order '%s' (salesperson: %s) "
+                            "to forecast plan '%s' (user: %s). "
+                            "\n\n"
+                            "Sales orders can only be allocated to forecast plans "
+                            "that belong to the same user. "
+                            "Please select a forecast plan belonging to '%s'."
+                        )
+                        % (
+                            rec.sale_order_id.name,
+                            so_user.name,
+                            rec.plan_id.name,
+                            plan_user.name,
+                            so_user.name,
+                        )
+                    )
 
     @api.constrains("allocated_qty")
     def _check_allocated_qty_positive(self):
