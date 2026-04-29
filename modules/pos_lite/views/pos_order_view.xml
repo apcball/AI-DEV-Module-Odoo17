@@ -7,6 +7,7 @@
             <tree decoration-success="state == 'paid'" decoration-muted="state == 'cancelled'" decoration-danger="is_return">
                 <field name="name"/>
                 <field name="state"/>
+                <field name="user_id"/>
                 <field name="channel"/>
                 <field name="partner_id"/>
                 <field name="warehouse_id"/>
@@ -28,6 +29,7 @@
             <search>
                 <field name="name"/>
                 <field name="partner_id" context="{'pos_lite_partner_search': 1}"/>
+                <field name="user_id"/>
                 <field name="warehouse_id"/>
                 <field name="channel"/>
                 <filter string="Draft" name="draft" domain="[('state', '=', 'draft')]"/>
@@ -37,6 +39,7 @@
                 <filter string="Returns" name="returns" domain="[('is_return', '=', True)]"/>
                 <group expand="0" string="Group By">
                     <filter string="Channel" name="group_channel" context="{'group_by': 'channel'}"/>
+                    <filter string="Salesperson" name="group_salesperson" context="{'group_by': 'user_id'}"/>
                     <filter string="Warehouse" name="group_warehouse" context="{'group_by': 'warehouse_id'}"/>
                     <filter string="State" name="group_state" context="{'group_by': 'state'}"/>
                 </group>
@@ -57,7 +60,7 @@
                     <button name="action_cancel" type="object" string="Cancel" invisible="state == 'cancelled'"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,paid,done,cancelled"/>
                 </header>
-                <sheet>
+                <sheet readonly="state != 'draft'">
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_invoice" type="object" class="oe_stat_button" icon="fa-file-text-o" invisible="not invoice_id">
                             <div class="o_stat_info">
@@ -84,6 +87,7 @@
                             <field name="partner_tax_id"/>
                         </group>
                         <group string="Order">
+                            <field name="user_id"/>
                             <field name="channel"/>
                             <field name="warehouse_id"/>
                             <field name="pricelist_id"/>

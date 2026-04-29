@@ -14,6 +14,8 @@ class PosLiteOrder(models.Model):
     _order = 'id desc'
     _rec_name = 'name'
 
+    _LOCKED_WRITE_ALLOWED_FIELDS = {'state'}
+
     name = fields.Char(default='/', copy=False, readonly=True, tracking=True)
     company_id = fields.Many2one('res.company', required=True, default=lambda self: self.env.company)
     currency_id = fields.Many2one(related='company_id.currency_id', store=True, readonly=True)
@@ -23,6 +25,7 @@ class PosLiteOrder(models.Model):
         ('done', 'Done'),
         ('cancelled', 'Cancelled'),
     ], default='draft', required=True, tracking=True)
+    user_id = fields.Many2one('res.users', string='Salesperson', default=lambda self: self.env.user, tracking=True)
     channel = fields.Selection([
         ('phone', 'Phone'),
         ('line', 'LINE'),
@@ -68,6 +71,27 @@ class PosLiteOrder(models.Model):
         ('name_unique', 'unique(name)', 'Order number must be unique.'),
     ]
 
+    def _check_locked_write(self, vals):
+        if self.env.context.get('pos_lite_allow_locked_write'):
+            return
+        locked = self.filtered(lambda order: order.state != 'draft')
+        if not locked:
+            return
+        forbidden = set(vals) - self._LOCKED_WRITE_ALLOWED_FIELDS
+        if forbidden:
+            raise UserError(_('This order is locked after payment and cannot be modified.'))
+        if 'state' in vals:
+            target_state = vals['state']
+            current_states = set(locked.mapped('state'))
+            if target_state == 'done':
+                if current_states != {'paid'}:
+                    raise UserError(_('Only paid orders can be marked as done.'))
+            elif target_state == 'cancelled':
+                if not current_states.issubset({'draft', 'paid'}):
+                    raise UserError(_('Cannot cancel a completed order.'))
+            else:
+                raise UserError(_('This order is locked after payment and cannot be modified.'))
+
     @api.depends('line_ids.price_subtotal', 'line_ids.price_tax', 'payment_ids.amount', 'is_return')
     def _compute_amounts(self):
         for order in self:
@@ -89,6 +113,10 @@ class PosLiteOrder(models.Model):
             if vals.get('name', '/') == '/' or not vals.get('name'):
                 vals['name'] = self.env['ir.sequence'].next_by_code('pos.lite.order') or '/'
         return super().create(vals_list)
+
+    def write(self, vals):
+        self._check_locked_write(vals)
+        return super().write(vals)
 
     @api.onchange('partner_id')
     def _onchange_partner_id(self):
@@ -336,14 +364,14 @@ class PosLiteOrder(models.Model):
                 raise UserError(_('Cannot cancel an order with a completed stock transfer.'))
             if order.invoice_id:
                 order.invoice_id.unlink()
-                order.invoice_id = False
+                order.with_context(pos_lite_allow_locked_write=True).write({'invoice_id': False})
             if order.picking_id:
                 if order.picking_id.state != 'cancel':
                     order.picking_id.action_cancel()
                 order.picking_id.unlink()
-                order.picking_id = False
+                order.with_context(pos_lite_allow_locked_write=True).write({'picking_id': False})
             if order.payment_ids:
-                order.payment_ids.unlink()
+                order.payment_ids.with_context(pos_lite_allow_locked_write=True).unlink()
         self.write({'state': 'cancelled'})
 
     def action_view_invoice(self):
@@ -412,6 +440,31 @@ class PosLiteOrderLine(models.Model):
             returned_qty = sum(line.return_line_ids.mapped('qty'))
             line.returned_qty = returned_qty
             line.available_return_qty = max(line.qty - returned_qty, 0.0)
+
+    def _check_locked_parent(self):
+        if self.env.context.get('pos_lite_allow_locked_write'):
+            return
+        locked_orders = self.mapped('order_id').filtered(lambda order: order.state != 'draft')
+        if locked_orders:
+            raise UserError(_('This order is locked after payment and the lines cannot be modified.'))
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        if not self.env.context.get('pos_lite_allow_locked_write'):
+            order_ids = [vals.get('order_id') for vals in vals_list if vals.get('order_id')]
+            if order_ids:
+                locked_orders = self.env['pos.lite.order'].browse(order_ids).filtered(lambda order: order.state != 'draft')
+                if locked_orders:
+                    raise UserError(_('This order is locked after payment and the lines cannot be modified.'))
+        return super().create(vals_list)
+
+    def write(self, vals):
+        self._check_locked_parent()
+        return super().write(vals)
+
+    def unlink(self):
+        self._check_locked_parent()
+        return super().unlink()
 
     @api.depends('qty', 'price_unit', 'discount', 'product_id', 'order_id.partner_id', 'order_id.pricelist_id')
     def _compute_amounts(self):

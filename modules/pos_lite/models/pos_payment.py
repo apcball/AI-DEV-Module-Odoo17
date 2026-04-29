@@ -33,6 +33,31 @@ class PosLitePayment(models.Model):
         ('order_unique_payment', 'unique(order_id)', 'Split payment is out of scope. Use a single payment per order.'),
     ]
 
+    def _check_locked_parent(self):
+        if self.env.context.get('pos_lite_allow_locked_write'):
+            return
+        locked_orders = self.mapped('order_id').filtered(lambda order: order.state != 'draft')
+        if locked_orders:
+            raise ValidationError(_('This order is locked after payment and the payment cannot be modified.'))
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        if not self.env.context.get('pos_lite_allow_locked_write'):
+            order_ids = [vals.get('order_id') for vals in vals_list if vals.get('order_id')]
+            if order_ids:
+                locked_orders = self.env['pos.lite.order'].browse(order_ids).filtered(lambda order: order.state != 'draft')
+                if locked_orders:
+                    raise ValidationError(_('This order is locked after payment and the payment cannot be modified.'))
+        return super().create(vals_list)
+
+    def write(self, vals):
+        self._check_locked_parent()
+        return super().write(vals)
+
+    def unlink(self):
+        self._check_locked_parent()
+        return super().unlink()
+
     @api.onchange('payment_method')
     def _onchange_payment_method(self):
         if self.payment_method and not self.journal_id and self.order_id:

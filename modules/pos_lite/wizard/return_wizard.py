@@ -67,6 +67,7 @@ class PosLiteReturnWizard(models.TransientModel):
 
         return_order_vals = {
             'company_id': order.company_id.id,
+            'user_id': order.user_id.id if order.user_id else self.env.user.id,
             'channel': order.channel,
             'customer_name': order.customer_name,
             'partner_id': order.partner_id.id if order.partner_id else False,
