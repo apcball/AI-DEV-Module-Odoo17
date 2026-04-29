@@ -27,29 +27,50 @@ export class InternalConsumeBarcodeApp extends Component {
     }
 
     startCameraScanner() {
+        if (typeof Html5QrcodeScanner === "undefined") {
+            this.notification.add("QR camera library is not loaded.", { type: "danger" });
+            return;
+        }
+
         this.state.cameraEnabled = true;
-        // Wait for DOM to render the reader div
         setTimeout(() => {
-            const config = { 
-                fps: 10, 
-                qrbox: 250,
-                videoConstraints: { facingMode: "environment" }
-            };
-            this.html5QrcodeScanner = new Html5QrcodeScanner("reader", config);
-            this.html5QrcodeScanner.render(this.onScanSuccess.bind(this), this.onScanError.bind(this));
+            try {
+                const config = {
+                    fps: 10,
+                    qrbox: 250,
+                    videoConstraints: { facingMode: "environment" }
+                };
+                this.html5QrcodeScanner = new Html5QrcodeScanner("reader", config, false);
+                this.html5QrcodeScanner.render(this.onScanSuccess.bind(this), this.onScanError.bind(this));
+            } catch (error) {
+                console.error(error);
+                this.notification.add(`ไม่สามารถเปิดกล้องได้: ${error.message || error}`, { type: "danger" });
+                this.state.cameraEnabled = false;
+            }
         }, 200);
     }
     
     startProductCameraScanner() {
+        if (typeof Html5QrcodeScanner === "undefined") {
+            this.notification.add("QR camera library is not loaded.", { type: "danger" });
+            return;
+        }
+
         this.state.cameraEnabled = true;
         setTimeout(() => {
-            const config = { 
-                fps: 10, 
-                qrbox: 250,
-                videoConstraints: { facingMode: "environment" }
-            };
-            this.html5QrcodeScanner = new Html5QrcodeScanner("product_reader", config);
-            this.html5QrcodeScanner.render(this.onProductScanSuccess.bind(this), this.onScanError.bind(this));
+            try {
+                const config = {
+                    fps: 10,
+                    qrbox: 250,
+                    videoConstraints: { facingMode: "environment" }
+                };
+                this.html5QrcodeScanner = new Html5QrcodeScanner("product_reader", config, false);
+                this.html5QrcodeScanner.render(this.onProductScanSuccess.bind(this), this.onScanError.bind(this));
+            } catch (error) {
+                console.error(error);
+                this.notification.add(`ไม่สามารถเปิดกล้องได้: ${error.message || error}`, { type: "danger" });
+                this.state.cameraEnabled = false;
+            }
         }, 200);
     }
     

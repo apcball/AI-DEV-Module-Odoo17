@@ -2,7 +2,7 @@
 
 import { FormController } from "@web/views/form/form_controller";
 import { patch } from "@web/core/utils/patch";
-import { rpc } from "@web/core/rpc";
+import { rpc } from "@web/core/network/rpc_service";
 import { registry } from "@web/core/registry";
 
 // Global variables for QR Scanner
@@ -19,7 +19,8 @@ window.startInternalQRScanner = async function() {
         }
 
         if (html5QrcodeScanner) {
-            html5QrcodeScanner.clear();
+            await html5QrcodeScanner.clear();
+            html5QrcodeScanner = null;
         }
 
         const config = {

@@ -145,6 +145,7 @@
                                 <field name="manager_id"/>
                             </group>
                             <group name="location_info">
+                                <field name="company_id" invisible="1"/>
                                 <field name="warehouse_id" options="{'no_create': True}"/>
                                 <field name="picking_type_id"/>
                                 <field name="location_id"/>
@@ -203,10 +204,10 @@
                                 </group>
                                 <group>
                                     <group string="ลายเซ็นผู้จ่าย">
-                                        <field name="issuer_signature" widget="signature" readonly="state in ('partial_pick', 'done')"/>
+                                        <field name="issuer_signature" widget="signature" readonly="state == 'done'"/>
                                     </group>
                                     <group string="ลายเซ็นผู้รับ">
-                                        <field name="receiver_signature" widget="signature" readonly="state in ('partial_pick', 'done')"/>
+                                        <field name="receiver_signature" widget="signature" readonly="state == 'done'"/>
                                     </group>
                                 </group>
                             </page>
