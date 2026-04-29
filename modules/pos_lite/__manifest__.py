@@ -27,6 +27,7 @@ Creates invoice, stock picking, and printable receipt from a lightweight backend
         'security/ir.model.access.csv',
         'data/sequence_data.xml',
         'report/receipt_report.xml',
+        'views/pos_session_view.xml',
         'views/pos_order_view.xml',
         'views/pos_config_view.xml',
         'views/menu.xml',

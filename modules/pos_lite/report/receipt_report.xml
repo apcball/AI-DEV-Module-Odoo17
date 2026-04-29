@@ -62,6 +62,7 @@
                         <div t-if="o.customer_name">Customer: <span t-esc="o.customer_name"/></div>
                         <div>Channel: <span t-esc="o.channel"/></div>
                         <div t-if="o.user_id">Salesperson: <span t-esc="o.user_id.name"/></div>
+                        <div t-if="o.session_id">Session: <span t-esc="o.session_id.name"/></div>
                         <div>Cashier: <span t-esc="o.create_uid.name"/></div>
                     </div>
                     <table class="table table-sm" style="width: 100%; margin-bottom: 8px;">

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import api, fields, models
+from odoo import api, fields, models, _
 
 
 class PosLiteConfig(models.Model):
@@ -29,6 +29,15 @@ class PosLiteConfig(models.Model):
         help='Default cash/bank journal for POS Lite payments',
         check_company=True,
     )
+    session_ids = fields.One2many('pos.lite.session', 'config_id', string='Sessions')
+    open_session_count = fields.Integer(compute='_compute_session_stats')
+    session_count = fields.Integer(compute='_compute_session_stats')
+
+    @api.depends('session_ids.state')
+    def _compute_session_stats(self):
+        for config in self:
+            config.session_count = len(config.session_ids)
+            config.open_session_count = len(config.session_ids.filtered(lambda session: session.state == 'open'))
 
     @api.model
     def get_default_config(self, company=None):
@@ -37,3 +46,37 @@ class PosLiteConfig(models.Model):
             ('company_id', '=', company.id),
             ('active', '=', True),
         ], order='id desc', limit=1)
+
+    def action_view_sessions(self):
+        self.ensure_one()
+        action = self.env.ref('pos_lite.action_pos_lite_sessions').read()[0]
+        action['domain'] = [('config_id', '=', self.id)]
+        action['context'] = {
+            'default_config_id': self.id,
+            'default_company_id': self.company_id.id,
+        }
+        return action
+
+    def action_open_session(self):
+        self.ensure_one()
+        session = self.env['pos.lite.session'].search([
+            ('company_id', '=', self.company_id.id),
+            ('config_id', '=', self.id),
+            ('state', 'in', ('draft', 'open')),
+        ], order='id desc', limit=1)
+        if not session:
+            session = self.env['pos.lite.session'].create({
+                'company_id': self.company_id.id,
+                'config_id': self.id,
+                'user_id': self.env.user.id,
+            })
+        if session.state != 'open':
+            session.action_open_session()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('POS Lite Session'),
+            'res_model': 'pos.lite.session',
+            'view_mode': 'form',
+            'res_id': session.id,
+            'target': 'current',
+        }

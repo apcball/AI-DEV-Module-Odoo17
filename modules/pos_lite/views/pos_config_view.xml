@@ -10,6 +10,8 @@
                 <field name="warehouse_id"/>
                 <field name="pricelist_id"/>
                 <field name="journal_id"/>
+                <field name="session_count"/>
+                <field name="open_session_count"/>
                 <field name="active"/>
             </tree>
         </field>
@@ -21,18 +23,44 @@
         <field name="arch" type="xml">
             <form string="POS Lite Configuration">
                 <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_sessions" type="object" class="oe_stat_button" icon="fa-clock-o">
+                            <field name="session_count" widget="statinfo" string="Sessions"/>
+                        </button>
+                        <button name="action_open_session" type="object" class="oe_stat_button" icon="fa-play-circle">
+                            <field name="open_session_count" widget="statinfo" string="Open Sessions"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Configuration Name"/></h1>
+                    </div>
                     <group>
-                        <group>
-                            <field name="name"/>
+                        <group string="General">
                             <field name="company_id"/>
                             <field name="active"/>
                         </group>
-                        <group>
+                        <group string="Defaults">
                             <field name="warehouse_id"/>
                             <field name="pricelist_id"/>
                             <field name="journal_id"/>
                         </group>
                     </group>
+                    <notebook>
+                        <page string="Session Overview">
+                            <field name="session_ids" nolabel="1" readonly="1">
+                                <tree decoration-success="state == 'open'" decoration-muted="state == 'closed'" decoration-info="state == 'draft'">
+                                    <field name="name"/>
+                                    <field name="state"/>
+                                    <field name="user_id"/>
+                                    <field name="order_count"/>
+                                    <field name="amount_total" sum="Net"/>
+                                    <field name="amount_paid" sum="Paid"/>
+                                    <field name="date_start"/>
+                                    <field name="date_end"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>

@@ -7,13 +7,14 @@
             <tree decoration-success="state == 'paid'" decoration-muted="state == 'cancelled'" decoration-danger="is_return">
                 <field name="name"/>
                 <field name="state"/>
+                <field name="session_id"/>
                 <field name="user_id"/>
                 <field name="channel"/>
                 <field name="partner_id"/>
                 <field name="warehouse_id"/>
-                    <field name="amount_total" sum="Total"/>
-                    <field name="amount_paid" sum="Total"/>
-                    <field name="amount_change" sum="Total"/>
+                <field name="amount_total" sum="Total"/>
+                <field name="amount_paid" sum="Paid"/>
+                <field name="amount_change" sum="Change"/>
                 <field name="is_return" invisible="1"/>
                 <field name="return_of_order_id"/>
                 <field name="invoice_id"/>
@@ -28,6 +29,7 @@
         <field name="arch" type="xml">
             <search>
                 <field name="name"/>
+                <field name="session_id"/>
                 <field name="partner_id" context="{'pos_lite_partner_search': 1}"/>
                 <field name="user_id"/>
                 <field name="warehouse_id"/>
@@ -38,6 +40,7 @@
                 <filter string="Cancelled" name="cancelled" domain="[('state', '=', 'cancelled')]"/>
                 <filter string="Returns" name="returns" domain="[('is_return', '=', True)]"/>
                 <group expand="0" string="Group By">
+                    <filter string="Session" name="group_session" context="{'group_by': 'session_id'}"/>
                     <filter string="Channel" name="group_channel" context="{'group_by': 'channel'}"/>
                     <filter string="Salesperson" name="group_salesperson" context="{'group_by': 'user_id'}"/>
                     <filter string="Warehouse" name="group_warehouse" context="{'group_by': 'warehouse_id'}"/>
@@ -62,6 +65,12 @@
                 </header>
                 <sheet readonly="state != 'draft'">
                     <div class="oe_button_box" name="button_box">
+                        <button name="action_view_session" type="object" class="oe_stat_button" icon="fa-calendar" invisible="not session_id">
+                            <div class="o_stat_info">
+                                <span class="o_stat_value"><field name="session_id"/></span>
+                                <span class="o_stat_text">Session</span>
+                            </div>
+                        </button>
                         <button name="action_view_invoice" type="object" class="oe_stat_button" icon="fa-file-text-o" invisible="not invoice_id">
                             <div class="o_stat_info">
                                 <span class="o_stat_value"><field name="invoice_id"/></span>
@@ -86,7 +95,8 @@
                             <field name="partner_address"/>
                             <field name="partner_tax_id"/>
                         </group>
-                        <group string="Order">
+                        <group string="Order Details">
+                            <field name="session_id" options="{'no_create_edit': True}"/>
                             <field name="user_id"/>
                             <field name="channel"/>
                             <field name="warehouse_id"/>
@@ -111,9 +121,9 @@
                                     <field name="qty"/>
                                     <field name="price_unit"/>
                                     <field name="discount"/>
-                                        <field name="price_subtotal" readonly="1" sum="Total"/>
-                                        <field name="price_tax" readonly="1" sum="Total"/>
-                                        <field name="price_total" readonly="1" sum="Total"/>
+                                    <field name="price_subtotal" readonly="1" sum="Total"/>
+                                    <field name="price_tax" readonly="1" sum="Tax"/>
+                                    <field name="price_total" readonly="1" sum="Grand Total"/>
                                 </tree>
                             </field>
                         </page>

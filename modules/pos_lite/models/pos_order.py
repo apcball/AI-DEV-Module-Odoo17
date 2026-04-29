@@ -26,6 +26,12 @@ class PosLiteOrder(models.Model):
         ('cancelled', 'Cancelled'),
     ], default='draft', required=True, tracking=True)
     user_id = fields.Many2one('res.users', string='Salesperson', default=lambda self: self.env.user, tracking=True)
+    session_id = fields.Many2one(
+        'pos.lite.session',
+        domain="[('company_id', '=', company_id), ('state', '=', 'open')]",
+        tracking=True,
+        check_company=True,
+    )
     channel = fields.Selection([
         ('phone', 'Phone'),
         ('line', 'LINE'),
@@ -92,6 +98,24 @@ class PosLiteOrder(models.Model):
             else:
                 raise UserError(_('This order is locked after payment and cannot be modified.'))
 
+    @api.model
+    def _get_default_session(self, company=None, create=True):
+        company = company or self.env.company
+        session_model = self.env['pos.lite.session']
+        config = self.env['pos.lite.config'].get_default_config(company)
+        session = session_model.get_open_session(company=company, config=config, create=False)
+        if session or not create:
+            return session
+        if not config:
+            return session_model.browse()
+        session = session_model.create({
+            'company_id': company.id,
+            'config_id': config.id,
+            'user_id': self.env.user.id,
+        })
+        session.action_open_session()
+        return session
+
     @api.depends('line_ids.price_subtotal', 'line_ids.price_tax', 'payment_ids.amount', 'is_return')
     def _compute_amounts(self):
         for order in self:
@@ -112,6 +136,11 @@ class PosLiteOrder(models.Model):
         for vals in vals_list:
             if vals.get('name', '/') == '/' or not vals.get('name'):
                 vals['name'] = self.env['ir.sequence'].next_by_code('pos.lite.order') or '/'
+            if not vals.get('session_id'):
+                company_id = vals.get('company_id') or self.env.company.id
+                session = self._get_default_session(self.env['res.company'].browse(company_id), create=True)
+                if session:
+                    vals['session_id'] = session.id
         return super().create(vals_list)
 
     def write(self, vals):
@@ -139,6 +168,8 @@ class PosLiteOrder(models.Model):
         if config:
             self.warehouse_id = config.warehouse_id
             self.pricelist_id = config.pricelist_id
+            session = self.env['pos.lite.session'].get_open_session(company=self.company_id, config=config, create=False)
+            self.session_id = session or False
 
     def _get_walk_in_partner(self):
         self.ensure_one()
@@ -305,6 +336,12 @@ class PosLiteOrder(models.Model):
         for order in self:
             if order.state != 'draft':
                 continue
+            if not order.session_id:
+                order.session_id = order._get_default_session(order.company_id, create=True)
+            if not order.session_id:
+                raise UserError(_('Please open a POS Lite session before processing the order.'))
+            if order.session_id.state != 'open':
+                raise UserError(_('The selected POS Lite session must be open before processing the order.'))
             if not order.line_ids:
                 raise UserError(_('Please add at least one order line.'))
             if len(order.payment_ids) != 1:
@@ -397,6 +434,19 @@ class PosLiteOrder(models.Model):
             'res_model': 'stock.picking',
             'view_mode': 'form',
             'res_id': self.picking_id.id,
+            'target': 'current',
+        }
+
+    def action_view_session(self):
+        self.ensure_one()
+        if not self.session_id:
+            raise UserError(_('No session has been assigned yet.'))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('POS Lite Session'),
+            'res_model': 'pos.lite.session',
+            'view_mode': 'form',
+            'res_id': self.session_id.id,
             'target': 'current',
         }
 
