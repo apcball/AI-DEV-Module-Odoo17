@@ -20,6 +20,7 @@
         'stock',
     ],
     'data': [
+        'security/security.xml',
         'views/mrp_unbuild_views.xml',
     ],
     'installable': True,
