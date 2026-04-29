@@ -235,7 +235,12 @@ class PosLiteOrder(models.Model):
         picking.action_assign()
         for move in picking.move_ids_without_package:
             for move_line in move.move_line_ids:
-                move_line.qty_done = move_line.product_uom_qty or move.product_uom_qty
+                reserved_qty = move_line.reserved_uom_qty if 'reserved_uom_qty' in move_line._fields else 0.0
+                done_qty = reserved_qty or move.product_uom_qty
+                if 'quantity' in move_line._fields:
+                    move_line.quantity = done_qty
+                elif 'qty_done' in move_line._fields:
+                    move_line.qty_done = done_qty
             if not move.move_line_ids:
                 move._action_assign()
         result = picking.button_validate()

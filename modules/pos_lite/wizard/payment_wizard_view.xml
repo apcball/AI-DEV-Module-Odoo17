@@ -7,6 +7,7 @@
             <form string="Register Payment">
                 <group>
                     <field name="order_id" readonly="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="payment_method"/>
                     <field name="amount"/>
                     <field name="journal_id"/>

@@ -10,9 +10,9 @@
                 <field name="channel"/>
                 <field name="partner_id"/>
                 <field name="warehouse_id"/>
-                <field name="amount_total"/>
-                <field name="amount_paid"/>
-                <field name="amount_change"/>
+                    <field name="amount_total" sum="Total"/>
+                    <field name="amount_paid" sum="Total"/>
+                    <field name="amount_change" sum="Total"/>
                 <field name="is_return" invisible="1"/>
                 <field name="return_of_order_id"/>
                 <field name="invoice_id"/>
@@ -100,15 +100,16 @@
                     <notebook>
                         <page string="Order Lines">
                             <field name="line_ids" mode="tree" nolabel="1">
-                                <tree editable="bottom">
+                                <tree editable="bottom" options="{'footer': 'true'}">
+                                    <field name="company_id" invisible="1"/>
                                     <field name="product_id" context="{'pos_lite_search': 1}"/>
                                     <field name="description" readonly="1"/>
                                     <field name="qty"/>
                                     <field name="price_unit"/>
                                     <field name="discount"/>
-                                    <field name="price_subtotal" readonly="1"/>
-                                    <field name="price_tax" readonly="1"/>
-                                    <field name="price_total" readonly="1"/>
+                                        <field name="price_subtotal" readonly="1" sum="Total"/>
+                                        <field name="price_tax" readonly="1" sum="Total"/>
+                                        <field name="price_total" readonly="1" sum="Total"/>
                                 </tree>
                             </field>
                         </page>
@@ -125,14 +126,14 @@
                         <page string="Totals">
                             <group>
                                 <group>
-                                    <field name="amount_untaxed" readonly="1"/>
-                                    <field name="amount_tax" readonly="1"/>
-                                    <field name="amount_total" readonly="1"/>
+                                    <field name="amount_untaxed" readonly="1" widget="monetary"/>
+                                    <field name="amount_tax" readonly="1" widget="monetary"/>
+                                    <field name="amount_total" readonly="1" widget="monetary"/>
                                 </group>
                                 <group>
-                                    <field name="amount_paid" readonly="1"/>
-                                    <field name="amount_residual" readonly="1"/>
-                                    <field name="amount_change" readonly="1"/>
+                                    <field name="amount_paid" readonly="1" widget="monetary"/>
+                                    <field name="amount_residual" readonly="1" widget="monetary"/>
+                                    <field name="amount_change" readonly="1" widget="monetary"/>
                                 </group>
                             </group>
                         </page>
