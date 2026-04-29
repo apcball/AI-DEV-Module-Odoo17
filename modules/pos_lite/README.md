@@ -4,17 +4,27 @@
 
 ## 📋 Overview
 
-POS Lite is a simplified Point-of-Sale module designed for manual order entry scenarios such as phone orders, LINE orders, and walk-in customers. Unlike the standard Odoo POS which uses a grid-based interface, POS Lite provides a clean, form-based interface that's easy to use on desktop and mobile devices.
+POS Lite is a simplified Point-of-Sale module for manual order entry scenarios such as phone orders, LINE orders, walk-in customers, and back-office sales processing.
+
+It combines a clean backend form with a modern kanban/session dashboard, smart buttons, automatic document generation, refund handling, and session-based operation. The module is designed to be fast to use on desktop while still remaining simple enough for frontline staff.
 
 ## 🎯 Features
 
 ### Order Management
 - **Multi-channel support**: Phone, LINE, Walk-in, Other
 - **Customer information**: Name, phone, address, tax ID
+- **Salesperson**: `user_id` on each order
 - **Warehouse selection**: Per-order warehouse assignment
 - **Pricelist support**: Automatic price calculation based on pricelist
 - **Order lines**: Add products with quantity, price, discount
 - **Automatic calculations**: Subtotal, tax, total, paid amount, change
+
+### Session Management
+- **Session-based workflow**: Orders are grouped into `pos.lite.session`
+- **Modern UI**: Kanban view, status colors, and smart buttons
+- **Session smart buttons**: Quick access to session orders and totals
+- **Responsible user**: Session owner tracked with `user_id`
+- **Open / Close control**: Draft → Open → Closed lifecycle
 
 ### Payment Processing
 - **Single payment per order**: Cash, Transfer, or Card
@@ -22,16 +32,29 @@ POS Lite is a simplified Point-of-Sale module designed for manual order entry sc
 - **Journal selection**: Auto-select cash/bank journal from config
 
 ### Document Generation
-- **Invoice creation**: Automatic `account.move` (out_invoice)
+- **Invoice creation**: Automatic `account.move` (`out_invoice`)
 - **Stock picking**: Automatic `stock.picking` for product delivery
 - **Receipt printing**: Three formats available
   - Thermal 58mm
   - Thermal 80mm
   - A4 PDF
 
+### Return / Refund
+- **Return wizard**: Create a return from completed orders
+- **Credit note**: Automatic `out_refund` generation
+- **Stock return**: Incoming picking for returned products
+- **Refund payment**: Supports refund registration and tracking
+- **Partial or full return**: Return specific quantities or the full order
+
+### Document Locking
+- **Locked after payment**: Paid orders cannot be edited like drafts
+- **Safe state transitions**: Only valid status changes are allowed
+- **Controlled cancellation**: Completed orders cannot be cancelled
+
 ### Security & Permissions
 - **POS Lite User**: Can create/edit orders, register payments
 - **POS Lite Manager**: Full access including configuration
+- **Session user rule**: Users can only access their own sessions
 - **Multi-company support**: Record rules for data isolation
 
 ## 🏗️ Module Structure
@@ -42,12 +65,13 @@ pos_lite/
 ├── __manifest__.py
 ├── README.md
 ├── data/
-│   └── sequence_data.xml          # Order sequence configuration
+│   └── sequence_data.xml          # Order and session sequence configuration
 ├── models/
 │   ├── __init__.py
 │   ├── pos_order.py               # Main order model (pos.lite.order)
 │   ├── pos_payment.py             # Payment model (pos.lite.payment)
 │   ├── pos_config.py              # Configuration model (pos.lite.config)
+│   ├── pos_session.py             # Session model (pos.lite.session)
 │   ├── product_product.py         # Product search enhancement
 │   └── res_partner.py             # Partner search enhancement
 ├── report/
@@ -60,11 +84,14 @@ pos_lite/
 ├── views/
 │   ├── menu.xml                   # Menu items
 │   ├── pos_order_view.xml         # Order form/tree/search views
-│   └── pos_config_view.xml        # Configuration views
+│   ├── pos_config_view.xml        # Configuration views
+│   └── pos_session_view.xml       # Session kanban/tree/form views
 ├── wizard/
 │   ├── __init__.py
 │   ├── payment_wizard.py          # Payment wizard model
-│   └── payment_wizard_view.xml    # Payment wizard form
+│   ├── payment_wizard_view.xml    # Payment wizard form
+│   ├── return_wizard.py           # Return/refund wizard model
+│   └── return_wizard_view.xml     # Return/refund wizard form
 └── static/
     └── description/
         └── icon.png               # Module icon
@@ -79,7 +106,10 @@ Main order model with the following fields:
 |-------|------|-------------|
 | name | Char | Order number (auto-generated) |
 | company_id | Many2one | Company |
+| currency_id | Many2one | Company currency |
 | state | Selection | Draft → Paid → Done → Cancelled |
+| user_id | Many2one | Salesperson / responsible user |
+| session_id | Many2one | Linked session |
 | channel | Selection | Phone, LINE, Walk-in, Other |
 | customer_name | Char | Customer name (for walk-in) |
 | partner_id | Many2one | Linked partner |
@@ -98,11 +128,17 @@ Main order model with the following fields:
 | amount_change | Monetary | Change amount |
 | invoice_id | Many2one | Created invoice |
 | picking_id | Many2one | Created stock picking |
+| is_return | Boolean | Marks return/refund order |
+| return_of_order_id | Many2one | Original order for the return |
+| return_order_ids | One2many | Return orders linked to the original |
+| return_reason | Text | Return reason |
+| note | Text | Internal notes |
 
 ### `pos.lite.order.line` (Order Line)
 | Field | Type | Description |
 |-------|------|-------------|
 | order_id | Many2one | Parent order |
+| company_id | Many2one | Company |
 | product_id | Many2one | Product |
 | description | Char | Product description |
 | qty | Float | Quantity |
@@ -130,6 +166,66 @@ Main order model with the following fields:
 | pricelist_id | Many2one | Default pricelist |
 | journal_id | Many2one | Default payment journal |
 
+### `pos.lite.session` (Session Management)
+Session model used to group and control order processing.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | Char | Session number (auto-generated) |
+| company_id | Many2one | Company |
+| user_id | Many2one | Responsible user |
+| config_id | Many2one | Linked POS Lite config |
+| warehouse_id | Many2one | Related warehouse |
+| pricelist_id | Many2one | Related pricelist |
+| journal_id | Many2one | Related payment journal |
+| state | Selection | Draft → Open → Closed |
+| date_start | Datetime | Session start time |
+| date_end | Datetime | Session close time |
+| note | Text | Session notes |
+| order_ids | One2many | Orders in the session |
+| order_count | Integer | Total orders |
+| draft_order_count | Integer | Draft orders |
+| paid_order_count | Integer | Paid orders |
+| done_order_count | Integer | Done orders |
+| cancelled_order_count | Integer | Cancelled orders |
+| return_order_count | Integer | Return orders |
+| amount_total | Monetary | Net sales |
+| amount_paid | Monetary | Total paid |
+| amount_residual | Monetary | Remaining balance |
+| amount_change | Monetary | Change amount |
+| amount_return | Monetary | Total returns |
+
+## 🔄 Session Management
+
+### Overview
+A POS Lite session represents an operational working period for a cashier or salesperson. Orders are attached to an open session automatically so that sales activity can be tracked by shift, user, and configuration.
+
+The session dashboard provides a modern kanban view with quick status recognition and smart buttons for fast navigation.
+
+### Session Workflow
+1. **Draft**: Session is prepared but not yet in use
+2. **Open**: Session becomes active and can accept orders
+3. **Order capture**: New orders are linked to the open session automatically
+4. **Close**: Session can be closed once draft orders are processed or cancelled
+
+### Session Fields
+Key session fields include:
+- `name`
+- `company_id`
+- `user_id`
+- `config_id`
+- `state`
+- `date_start`
+- `date_end`
+- `order_ids`
+- summary counters and totals such as `order_count`, `amount_total`, `amount_paid`, `amount_residual`, and `amount_return`
+
+### Session Security (user rule)
+Session access is protected by a user rule:
+- Users can only see sessions where `user_id = current user`
+- Multi-company record rules still apply
+- Managers inherit user access and can manage sessions across allowed companies
+
 ## 🔄 Order Workflow
 
 ```
@@ -143,7 +239,7 @@ Main order model with the following fields:
 
 ### States:
 1. **Draft**: Initial state, can edit order lines and register payment
-2. **Paid**: Payment received, can process to create invoice/picking
+2. **Paid**: Payment received, order is locked from normal editing
 3. **Done**: Order completed, invoice and picking created
 4. **Cancelled**: Order cancelled (cannot cancel if invoice posted or picking done)
 
@@ -159,23 +255,28 @@ Main order model with the following fields:
   - Full access to all models including configuration
   - Inherits User permissions
 
-### Record Rules (Multi-company)
+### Record Rules
 All models have company-based record rules:
 - Orders: `[('company_id', 'in', company_ids)]`
 - Order Lines: `[('company_id', 'in', company_ids)]`
 - Payments: `[('company_id', 'in', company_ids)]`
 - Config: `[('company_id', 'in', company_ids)]`
+- Sessions: `[('company_id', 'in', company_ids)]`
+
+### Session User Rule
+- Session users are restricted to their own sessions
+- This keeps shift ownership clear and prevents cross-user session editing
 
 ## 📦 Dependencies
 
 ```python
 'depends': [
     'base',
-    'mail',           # chatter/messaging
-    'contacts',       # partner management
-    'product',        # product catalog
-    'stock',          # inventory/picking
-    'account',        # invoicing
+    'mail',            # chatter/messaging
+    'contacts',        # partner management
+    'product',         # product catalog
+    'stock',           # inventory/picking
+    'account',         # invoicing
     'sale_management', # pricelists
 ]
 ```
@@ -185,21 +286,25 @@ All models have company-based record rules:
 1. Copy `pos_lite` folder to your Odoo addons path
 2. Update module list in Odoo
 3. Install "POS Lite" module
-4. Configure default settings in POS Lite Config (optional)
+4. Configure default settings in POS Lite Config and open a session
 
 ## ⚙️ Configuration
 
 ### Default Settings (Optional)
 Navigate to **POS Lite > Configuration** to set default:
 - Warehouse
-- Pricelist  
+- Pricelist
 - Payment Journal
 
 This allows faster order creation by pre-filling these fields.
 
+### Session Setup
+Create or open a session from **POS Lite > Sessions** before processing orders.
+
 ### Sequence Configuration
-Order numbers are auto-generated using the `pos.lite.order` sequence.
-Default format: `POL00001`, `POL00002`, etc.
+Order and session numbers are auto-generated using their sequences.
+- Order default format: `POL00001`, `POL00002`, etc.
+- Session numbering is handled automatically from `pos.lite.session`
 
 ## 🖨️ Receipt Printing
 
@@ -211,7 +316,7 @@ Three receipt formats are available:
 - DPI: 90
 - Best for: Small thermal printers
 
-### Thermal 80mm  
+### Thermal 80mm
 - Paper width: 80mm
 - Margins: 3mm left/right, 2mm top/bottom
 - DPI: 90
@@ -230,6 +335,8 @@ Three receipt formats are available:
 1. Navigate to **POS Lite > Orders**
 2. Click **Create**
 3. Fill in:
+   - **Session**: Select an open session or let the system assign one
+   - **Salesperson**: Assigned automatically to the current user by default
    - **Channel**: Phone/LINE/Walk-in/Other
    - **Customer**: Select existing or enter name/phone
    - **Warehouse**: Select delivery warehouse
@@ -256,7 +363,7 @@ Three receipt formats are available:
 
 ### Creating a Return
 
-1. Open completed order (state = Done)
+1. Open completed order (`state = Done`)
 2. Click **Create Return**
 3. Return wizard opens:
    - Select products to return
@@ -265,7 +372,7 @@ Three receipt formats are available:
 4. Click **Create Return**
 5. System automatically:
    - Creates return order linked to original
-   - Creates Credit Note (out_refund)
+   - Creates Credit Note (`out_refund`)
    - Creates incoming picking for stock return
    - Processes refund payment
 6. Return order moves to **Done** state
