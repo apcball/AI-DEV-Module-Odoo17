@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_pos_lite_session_close_wizard_form" model="ir.ui.view">
+        <field name="name">pos.lite.session.close.wizard.form</field>
+        <field name="model">pos.lite.session.close.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Close Session Summary">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="session_id" readonly="1"/>
+                            <field name="company_id" invisible="1"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="state" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="date_start" readonly="1"/>
+                            <field name="date_end" readonly="1"/>
+                            <field name="note" readonly="1" nolabel="1"/>
+                        </group>
+                    </group>
+                    <group string="Sales Summary">
+                        <group>
+                            <field name="order_count" readonly="1"/>
+                            <field name="draft_order_count" readonly="1"/>
+                            <field name="paid_order_count" readonly="1"/>
+                            <field name="done_order_count" readonly="1"/>
+                            <field name="cancelled_order_count" readonly="1"/>
+                            <field name="return_order_count" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="gross_sales" readonly="1" widget="monetary"/>
+                            <field name="return_amount" readonly="1" widget="monetary"/>
+                            <field name="net_sales" readonly="1" widget="monetary"/>
+                            <field name="gross_paid" readonly="1" widget="monetary"/>
+                            <field name="net_paid" readonly="1" widget="monetary"/>
+                            <field name="residual_amount" readonly="1" widget="monetary"/>
+                            <field name="change_amount" readonly="1" widget="monetary"/>
+                        </group>
+                    </group>
+                    <group string="Payment Breakdown">
+                        <group>
+                            <field name="cash_amount" readonly="1" widget="monetary"/>
+                            <field name="transfer_amount" readonly="1" widget="monetary"/>
+                            <field name="card_amount" readonly="1" widget="monetary"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-warning" role="alert">
+                        Closing the session will prevent new orders from being added to this shift.
+                    </div>
+                </sheet>
+                <footer>
+                    <button name="action_confirm_close_session" type="object" string="Close &amp; Print Summary" class="btn-primary oe_highlight"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

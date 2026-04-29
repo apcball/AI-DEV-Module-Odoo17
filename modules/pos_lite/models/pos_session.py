@@ -77,20 +77,56 @@ class PosLiteSession(models.Model):
     @api.depends('order_ids.state', 'order_ids.amount_total', 'order_ids.amount_paid', 'order_ids.amount_residual', 'order_ids.amount_change', 'order_ids.is_return')
     def _compute_stats(self):
         for session in self:
-            orders = session.order_ids.filtered(lambda order: order.state != 'cancelled')
-            sales_orders = orders.filtered(lambda order: not order.is_return)
-            return_orders = orders.filtered(lambda order: order.is_return)
-            session.order_count = len(session.order_ids)
-            session.draft_order_count = len(session.order_ids.filtered(lambda order: order.state == 'draft'))
-            session.paid_order_count = len(session.order_ids.filtered(lambda order: order.state == 'paid'))
-            session.done_order_count = len(session.order_ids.filtered(lambda order: order.state == 'done'))
-            session.cancelled_order_count = len(session.order_ids.filtered(lambda order: order.state == 'cancelled'))
-            session.return_order_count = len(return_orders)
-            session.amount_total = sum(sales_orders.mapped('amount_total')) - sum(return_orders.mapped('amount_total'))
-            session.amount_paid = sum(sales_orders.mapped('amount_paid')) - sum(return_orders.mapped('amount_paid'))
-            session.amount_residual = sum(orders.mapped('amount_residual'))
-            session.amount_change = sum(orders.mapped('amount_change'))
-            session.amount_return = sum(return_orders.mapped('amount_total'))
+            summary = session._get_close_summary()
+            session.order_count = summary['order_count']
+            session.draft_order_count = summary['draft_order_count']
+            session.paid_order_count = summary['paid_order_count']
+            session.done_order_count = summary['done_order_count']
+            session.cancelled_order_count = summary['cancelled_order_count']
+            session.return_order_count = summary['return_order_count']
+            session.amount_total = summary['net_sales']
+            session.amount_paid = summary['net_paid']
+            session.amount_residual = summary['residual_amount']
+            session.amount_change = summary['change_amount']
+            session.amount_return = summary['return_amount']
+
+    def _get_close_summary(self):
+        self.ensure_one()
+        orders = self.order_ids.filtered(lambda order: order.state != 'cancelled')
+        sales_orders = orders.filtered(lambda order: not order.is_return)
+        return_orders = orders.filtered(lambda order: order.is_return)
+        payments = orders.mapped('payment_ids')
+        return {
+            'order_count': len(self.order_ids),
+            'draft_order_count': len(self.order_ids.filtered(lambda order: order.state == 'draft')),
+            'paid_order_count': len(self.order_ids.filtered(lambda order: order.state == 'paid')),
+            'done_order_count': len(self.order_ids.filtered(lambda order: order.state == 'done')),
+            'cancelled_order_count': len(self.order_ids.filtered(lambda order: order.state == 'cancelled')),
+            'return_order_count': len(return_orders),
+            'gross_sales': sum(sales_orders.mapped('amount_total')),
+            'return_amount': sum(return_orders.mapped('amount_total')),
+            'net_sales': sum(sales_orders.mapped('amount_total')) - sum(return_orders.mapped('amount_total')),
+            'gross_paid': sum(sales_orders.mapped('amount_paid')),
+            'net_paid': sum(sales_orders.mapped('amount_paid')) - sum(return_orders.mapped('amount_paid')),
+            'residual_amount': sum(orders.mapped('amount_residual')),
+            'change_amount': sum(orders.mapped('amount_change')),
+            'cash_amount': sum(payments.filtered(lambda payment: payment.payment_method == 'cash').mapped('amount')),
+            'transfer_amount': sum(payments.filtered(lambda payment: payment.payment_method == 'transfer').mapped('amount')),
+            'card_amount': sum(payments.filtered(lambda payment: payment.payment_method == 'card').mapped('amount')),
+        }
+
+    def action_do_close_session(self):
+        for session in self:
+            if session.state != 'open':
+                raise UserError(_('Only open sessions can be closed.'))
+            draft_orders = session.order_ids.filtered(lambda order: order.state == 'draft')
+            if draft_orders:
+                raise UserError(_('Please process or cancel all draft orders before closing the session.'))
+            session.write({
+                'state': 'closed',
+                'date_end': fields.Datetime.now(),
+            })
+        return True
 
     def action_open_session(self):
         for session in self:
@@ -105,17 +141,23 @@ class PosLiteSession(models.Model):
         return True
 
     def action_close_session(self):
-        for session in self:
-            if session.state != 'open':
-                raise UserError(_('Only open sessions can be closed.'))
-            draft_orders = session.order_ids.filtered(lambda order: order.state == 'draft')
-            if draft_orders:
-                raise UserError(_('Please process or cancel all draft orders before closing the session.'))
-            session.write({
-                'state': 'closed',
-                'date_end': fields.Datetime.now(),
-            })
-        return True
+        self.ensure_one()
+        if self.state != 'open':
+            raise UserError(_('Only open sessions can be closed.'))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Close Session Summary'),
+            'res_model': 'pos.lite.session.close.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_session_id': self.id,
+            },
+        }
+
+    def action_print_close_summary(self):
+        self.ensure_one()
+        return self.env.ref('pos_lite.action_report_pos_lite_session_close_summary').report_action(self)
 
     def action_view_orders(self):
         self.ensure_one()

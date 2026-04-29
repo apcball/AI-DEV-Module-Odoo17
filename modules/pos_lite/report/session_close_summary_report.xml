@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_session_close_summary_document">
+        <t t-call="web.basic_layout">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="summary" t-value="get_summary(o)"/>
+                <div class="page" style="font-size: 12px; line-height: 1.4;">
+                    <div style="text-align: center; margin-bottom: 16px;">
+                        <h2 style="margin: 0;">Session Close Summary</h2>
+                        <div t-esc="o.company_id.name"/>
+                        <div t-if="o.name">Session: <span t-esc="o.name"/></div>
+                        <div t-if="o.date_start">Start: <span t-esc="o.date_start.strftime('%Y-%m-%d %H:%M')"/></div>
+                        <div t-if="o.date_end">Closed: <span t-esc="o.date_end.strftime('%Y-%m-%d %H:%M')"/></div>
+                    </div>
+
+                    <table class="table table-sm" style="width: 100%; margin-bottom: 16px;">
+                        <tbody>
+                            <tr><td>Orders</td><td class="text-end"><span t-esc="summary['order_count']"/></td></tr>
+                            <tr><td>Draft Orders</td><td class="text-end"><span t-esc="summary['draft_order_count']"/></td></tr>
+                            <tr><td>Paid Orders</td><td class="text-end"><span t-esc="summary['paid_order_count']"/></td></tr>
+                            <tr><td>Done Orders</td><td class="text-end"><span t-esc="summary['done_order_count']"/></td></tr>
+                            <tr><td>Cancelled Orders</td><td class="text-end"><span t-esc="summary['cancelled_order_count']"/></td></tr>
+                            <tr><td>Return Orders</td><td class="text-end"><span t-esc="summary['return_order_count']"/></td></tr>
+                        </tbody>
+                    </table>
+
+                    <table class="table table-sm" style="width: 100%; margin-bottom: 16px;">
+                        <tbody>
+                            <tr><td>Gross Sales</td><td class="text-end"><span t-esc="formatLang(summary['gross_sales'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td>Return Amount</td><td class="text-end"><span t-esc="formatLang(summary['return_amount'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td><strong>Net Sales</strong></td><td class="text-end"><strong t-esc="formatLang(summary['net_sales'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td>Gross Paid</td><td class="text-end"><span t-esc="formatLang(summary['gross_paid'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td><strong>Net Paid</strong></td><td class="text-end"><strong t-esc="formatLang(summary['net_paid'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td>Residual Amount</td><td class="text-end"><span t-esc="formatLang(summary['residual_amount'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td>Change</td><td class="text-end"><span t-esc="formatLang(summary['change_amount'], currency_obj=o.currency_id)"/></td></tr>
+                        </tbody>
+                    </table>
+
+                    <table class="table table-sm" style="width: 100%; margin-bottom: 16px;">
+                        <tbody>
+                            <tr><td>Cash</td><td class="text-end"><span t-esc="formatLang(summary['cash_amount'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td>Transfer</td><td class="text-end"><span t-esc="formatLang(summary['transfer_amount'], currency_obj=o.currency_id)"/></td></tr>
+                            <tr><td>Card</td><td class="text-end"><span t-esc="formatLang(summary['card_amount'], currency_obj=o.currency_id)"/></td></tr>
+                        </tbody>
+                    </table>
+
+                    <div t-if="o.note" style="margin-top: 12px;">
+                        <strong>Note:</strong>
+                        <div t-esc="o.note"/>
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_pos_lite_session_close_summary" model="ir.actions.report">
+        <field name="name">POS Lite Session Close Summary</field>
+        <field name="model">pos.lite.session</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">pos_lite.report_session_close_summary_document</field>
+        <field name="report_file">pos_lite.report_session_close_summary_document</field>
+        <field name="binding_model_id" ref="model_pos_lite_session"/>
+        <field name="binding_type">report</field>
+        <field name="print_report_name">'Session Summary - %s' % (object.name)</field>
+    </record>
+</odoo>
