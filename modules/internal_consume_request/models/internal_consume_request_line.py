@@ -26,6 +26,12 @@ class InternalConsumeRequestLine(models.Model):
         index=True
     )
     
+    company_id = fields.Many2one(
+        related='request_id.company_id',
+        store=True,
+        readonly=True,
+    )
+    
     product_id = fields.Many2one(
         'product.product',
         string='Product',
@@ -162,7 +168,7 @@ class InternalConsumeRequestLine(models.Model):
             line.is_issued = line.issued_qty > 0
 
 
-    @api.depends('product_id', 'location_id', 'product_uom_id', 'request_id.warehouse_id')
+    @api.depends('product_id', 'location_id', 'product_uom_id', 'request_id.warehouse_id', 'request_id.company_id')
     def _compute_available_qty(self):
         """Compute available quantity from warehouse's stock location and child locations"""
         for line in self:
@@ -173,7 +179,9 @@ class InternalConsumeRequestLine(models.Model):
                     ('product_id', '=', line.product_id.id),
                     ('location_id', 'child_of', line.location_id.id),
                     ('location_id.usage', '=', 'internal'),  # Only internal locations
+                    ('company_id', 'in', [False, line.company_id.id]),
                 ])
+
                 
                 # Calculate available = on_hand - reserved
                 available_qty = 0.0

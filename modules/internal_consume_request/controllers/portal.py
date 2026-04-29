@@ -13,21 +13,24 @@ class InternalConsumePortal(http.Controller):
     def consume_receive_portal(self, token, **kwargs):
         """Render the portal page showing the QR Code for the employee"""
         request_sudo = request.env['internal.consume.request'].sudo().search([
-            ('qr_token', '=', token)
+            '|', ('qr_token', '=', token), ('name', '=', token)
         ], limit=1)
 
         if not request_sudo or request_sudo.state not in ['approved', 'done']:
             return request.render('website.page_404', {})
             
-        if request_sudo.picking_id or request_sudo.signature:
+        if request_sudo.picking_id or request_sudo.issuer_signature or request_sudo.receiver_signature:
             # Already processed -> Redirect to success/already done page
             return request.render('internal_consume_request.portal_receive_success', {
                 'message': _('This request has already been confirmed and signed.')
             })
             
+        # Render QR code that opens the secure portal route directly
+        qr_value = f'/consume/receive/{request_sudo.qr_token or request_sudo.name}'
         values = {
             'req': request_sudo,
             'token': token,
+            'qr_value': qr_value,
         }
         return request.render('internal_consume_request.portal_display_qr_template', values)
 
@@ -35,13 +38,13 @@ class InternalConsumePortal(http.Controller):
     def consume_scan_portal(self, token, **kwargs):
         """Render the portal page for receiving consumables (Stock Staff View)"""
         request_sudo = request.env['internal.consume.request'].sudo().search([
-            ('qr_token', '=', token)
+            '|', ('qr_token', '=', token), ('name', '=', token)
         ], limit=1)
 
         if not request_sudo or request_sudo.state not in ['approved', 'done']:
             return request.render('website.page_404', {})
             
-        if request_sudo.picking_id or request_sudo.signature:
+        if request_sudo.picking_id or request_sudo.issuer_signature or request_sudo.receiver_signature:
             # Already processed -> Redirect to success/already done page
             return request.render('internal_consume_request.portal_receive_success', {
                 'message': _('This request has already been confirmed and signed.')
@@ -81,13 +84,18 @@ class InternalConsumePortal(http.Controller):
             
         try:
             # Call the model method to process confirmation
-            request_sudo.action_confirm_receive(signature, stock_signature, lines_data)
+            request_sudo.action_confirm_receive(stock_signature, signature, lines_data)
+            if request_sudo.state == 'rejected':
+                return {
+                    'success': False,
+                    'error': request_sudo.reason or request_sudo.rejection_reason or _('Request rejected due to insufficient stock')
+                }
             return {
-                'success': True, 
+                'success': True,
                 'redirect_url': f'/consume/success?token={token}'
             }
         except Exception as e:
-            _logger.error(f"Error confirming consumable request: {str(e)}")
+            _logger.exception("Error confirming consumable request %s", token)
             return {'success': False, 'error': str(e)}
 
     @http.route(['/consume/success'], type='http', auth="public", website=True)

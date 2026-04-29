@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import logging
+import uuid
+
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
+
+_logger = logging.getLogger(__name__)
 
 
 class InternalConsumeRequest(models.Model):
@@ -27,12 +32,21 @@ class InternalConsumeRequest(models.Model):
         states={'approved': [('readonly', True)], 'partial_pick': [('readonly', True)], 'done': [('readonly', True)], 'rejected': [('readonly', True)], 'cancelled': [('readonly', True)]}
     )
     
+    company_id = fields.Many2one(
+        'res.company',
+        string='Company',
+        default=lambda self: self.env.company,
+        index=True,
+        tracking=True,
+    )
+
     employee_id = fields.Many2one(
         'hr.employee',
         string='Employee',
         required=True,
         default=lambda self: self.env.user.employee_id,
         tracking=True,
+        check_company=True,
         states={'approved': [('readonly', True)], 'partial_pick': [('readonly', True)], 'done': [('readonly', True)], 'rejected': [('readonly', True)], 'cancelled': [('readonly', True)]}
     )
     
@@ -58,6 +72,8 @@ class InternalConsumeRequest(models.Model):
         required=True,
         default=lambda self: self._default_warehouse_id(),
         tracking=True,
+        check_company=True,
+        domain="[('company_id', 'in', [False, company_id])]",
         states={'approved': [('readonly', True)], 'partial_pick': [('readonly', True)], 'done': [('readonly', True)], 'rejected': [('readonly', True)], 'cancelled': [('readonly', True)]}
     )
     
@@ -65,10 +81,11 @@ class InternalConsumeRequest(models.Model):
         'stock.picking.type',
         string='Picking Type',
         required=True,
-        domain="[('code', 'in', ['outgoing', 'internal']), ('warehouse_id', '=', warehouse_id)]",
+        domain="[('code', 'in', ['outgoing', 'internal']), ('warehouse_id', '=', warehouse_id), ('company_id', 'in', [False, company_id])]",
         compute='_compute_picking_type_id',
         store=True,
         readonly=False,
+        check_company=True,
         states={'approved': [('readonly', True)], 'partial_pick': [('readonly', True)], 'done': [('readonly', True)], 'rejected': [('readonly', True)], 'cancelled': [('readonly', True)]}
     )
     
@@ -76,10 +93,11 @@ class InternalConsumeRequest(models.Model):
         'stock.location',
         string='Source Location',
         required=True,
-        domain="[('usage', '=', 'internal')]",
+        domain="[('usage', '=', 'internal'), ('company_id', 'in', [False, company_id])]",
         compute='_compute_locations',
         store=True,
         readonly=False,
+        check_company=True,
         states={'approved': [('readonly', True)], 'partial_pick': [('readonly', True)], 'done': [('readonly', True)], 'rejected': [('readonly', True)], 'cancelled': [('readonly', True)]}
     )
     
@@ -87,10 +105,11 @@ class InternalConsumeRequest(models.Model):
         'stock.location',
         string='Destination Location',
         required=True,
-        domain="[('usage', 'in', ['customer', 'inventory', 'internal'])]",
+        domain="[('usage', 'in', ['customer', 'inventory', 'internal']), ('company_id', 'in', [False, company_id])]",
         compute='_compute_locations',
         store=True,
         readonly=False,
+        check_company=True,
         states={'approved': [('readonly', True)], 'partial_pick': [('readonly', True)], 'done': [('readonly', True)], 'rejected': [('readonly', True)], 'cancelled': [('readonly', True)]}
     )
     
@@ -123,6 +142,12 @@ class InternalConsumeRequest(models.Model):
     
     issuer_signature = fields.Binary(string='Issuer Signature', copy=False)
     receiver_signature = fields.Binary(string='Receiver Signature', copy=False)
+    qr_token = fields.Char(
+        string='Portal Token',
+        copy=False,
+        readonly=True,
+        index=True,
+    )
     
     issued_by = fields.Many2one(
         'res.users',
@@ -232,10 +257,16 @@ class InternalConsumeRequest(models.Model):
         help='Automatic rejection reason when stock is insufficient'
     )
 
+    _sql_constraints = [
+        ('qr_token_uniq', 'unique(qr_token)', 'QR token must be unique.'),
+    ]
+
     @api.model
     def _default_warehouse_id(self):
         """Default warehouse - get first available warehouse"""
-        warehouse = self.env['stock.warehouse'].search([], limit=1)
+        warehouse = self.env['stock.warehouse'].search([
+            ('company_id', 'in', [False, self.env.company.id]),
+        ], limit=1)
         return warehouse
 
     @api.model
@@ -244,9 +275,10 @@ class InternalConsumeRequest(models.Model):
         # Use customer location for consuming stock
         location = self.env.ref('stock.stock_location_customers', raise_if_not_found=False)
         if not location:
-            # Fallback to any customer location
+            # Fallback to any customer location for the current company
             location = self.env['stock.location'].search([
-                ('usage', '=', 'customer')
+                ('usage', '=', 'customer'),
+                ('company_id', 'in', [False, self.env.company.id]),
             ], limit=1)
         return location
 
@@ -311,6 +343,8 @@ class InternalConsumeRequest(models.Model):
             if vals.get('name', 'New') == 'New':
                 vals['name'] = self.env['ir.sequence'].next_by_code(
                     'internal.consume.request') or 'New'
+            if not vals.get('qr_token'):
+                vals['qr_token'] = uuid.uuid4().hex
         return super().create(vals_list)
     
     def copy(self, default=None):
@@ -333,6 +367,7 @@ class InternalConsumeRequest(models.Model):
                 }
                 new_line_ids.append((0, 0, line_vals))
             default['line_ids'] = new_line_ids
+        default['qr_token'] = uuid.uuid4().hex
         
         return super().copy(default)
 
@@ -377,12 +412,17 @@ class InternalConsumeRequest(models.Model):
                 )
             reason = '\n'.join(reason_lines)
             
-            # Call auto reject
             self._action_auto_reject(reason)
-            
-            raise UserError(
-                _('Request has been automatically rejected due to insufficient stock.\n\n%s') % reason
-            )
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Request Rejected'),
+                    'message': reason,
+                    'type': 'warning',
+                    'sticky': False,
+                }
+            }
         
         if not self.manager_id:
             raise UserError(_('No manager found for employee %s. Please set a manager first.') % self.employee_id.name)
@@ -507,7 +547,18 @@ class InternalConsumeRequest(models.Model):
                 )
                 
         # Create actual picking based on issued quantities
-        self._create_actual_picking(issued_lines)
+        picking_result = self._create_actual_picking(issued_lines)
+        if self.state == 'rejected':
+            return picking_result or {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Request Rejected'),
+                    'message': self.reason or self.rejection_reason or _('Request rejected due to insufficient stock.'),
+                    'type': 'warning',
+                    'sticky': False,
+                }
+            }
         
         self.issued_by = self.env.user.id
         self.issued_datetime = fields.Datetime.now()
@@ -521,6 +572,78 @@ class InternalConsumeRequest(models.Model):
             
         self.message_post(
             body=_('ยืนยันการจ่ายของเรียบร้อย. สถานะ: %s. เซ็นชื่อเสร็จสิ้น.') % self.state,
+            message_type='notification',
+            subtype_xmlid='mail.mt_note'
+        )
+
+    def action_confirm_receive(self, stock_signature, receiver_signature, lines_data=None):
+        """Confirm portal receive flow with both signatures and create the transfer."""
+        self.ensure_one()
+
+        if self.state != 'approved':
+            raise UserError(_('Only approved requests can be confirmed from the portal.'))
+
+        if not stock_signature or not receiver_signature:
+            raise UserError(_('Both signatures are required before confirming receipt.'))
+
+        if stock_signature and ',' in stock_signature:
+            stock_signature = stock_signature.split(',')[1]
+        if receiver_signature and ',' in receiver_signature:
+            receiver_signature = receiver_signature.split(',')[1]
+
+        if lines_data:
+            for line_data in lines_data:
+                line_id = line_data.get('id')
+                if not line_id:
+                    continue
+                line = self.line_ids.filtered(lambda l: l.id == int(line_id))
+                if not line:
+                    continue
+                line.issued_qty = float(line_data.get('picked_qty') or 0.0)
+
+        issued_lines = self.line_ids.filtered(lambda l: l.issued_qty > 0)
+        if not issued_lines:
+            raise UserError(_('Please confirm at least one line quantity before saving.'))
+
+        for line in issued_lines:
+            if line.issued_qty > line.qty_requested:
+                raise ValidationError(
+                    _('Issued quantity (%.2f) exceeds requested quantity (%.2f) for product %s.') % (
+                        line.issued_qty, line.qty_requested, line.product_id.display_name
+                    )
+                )
+            if line.issued_qty > line.available_qty:
+                raise ValidationError(
+                    _('Issued quantity (%.2f) exceeds available quantity (%.2f) for product %s.') % (
+                        line.issued_qty, line.available_qty, line.product_id.display_name
+                    )
+                )
+
+        self.write({
+            'issuer_signature': stock_signature,
+            'receiver_signature': receiver_signature,
+            'issued_by': self.env.user.id,
+            'issued_datetime': fields.Datetime.now(),
+        })
+
+        picking_result = self._create_actual_picking(issued_lines)
+        if self.state == 'rejected':
+            return picking_result or {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Request Rejected'),
+                    'message': self.reason or self.rejection_reason or _('Request rejected due to insufficient stock.'),
+                    'type': 'warning',
+                    'sticky': False,
+                }
+            }
+
+        all_fulfilled = all(line.issued_qty >= line.qty_requested for line in self.line_ids)
+        self.state = 'done' if all_fulfilled else 'partial_pick'
+
+        self.message_post(
+            body=_('Portal receive confirmed by %s') % self.env.user.name,
             message_type='notification',
             subtype_xmlid='mail.mt_note'
         )
@@ -633,13 +756,9 @@ class InternalConsumeRequest(models.Model):
                 )
             reason = '\n'.join(reason_lines)
             
-            # Auto reject
             self._action_auto_reject(reason)
-            
-            raise UserError(
-                _('Request has been automatically rejected.\n'
-                  'Stock levels changed before creating picking.\n\n%s') % reason
-            )
+            _logger.warning('Auto-rejected internal consume request %s before picking creation: %s', self.name, reason)
+            return False
         
         # Prepare picking values for delivery/consumption
         picking_vals = {
@@ -649,6 +768,7 @@ class InternalConsumeRequest(models.Model):
             'origin': self.name,
             'scheduled_date': fields.Datetime.now(),
             'partner_id': self.partner_id.id if self.partner_id else False,
+            'company_id': self.company_id.id,
             'move_ids_without_package': []
         }
         
@@ -693,8 +813,10 @@ class InternalConsumeRequest(models.Model):
         try:
             picking.button_validate()
         except Exception as e:
-            # If auto-validation fails, at least we created it and assigned quantities
-            pass
+            _logger.exception('Failed to auto-validate picking %s for request %s', picking.name, self.name)
+            raise UserError(_('The transfer was created, but automatic validation failed for picking %s: %s') % (picking.name, e))
+
+        return picking
 
     def action_create_picking(self):
         """Deprecated: Use action_confirm_issue instead."""
@@ -766,7 +888,6 @@ class InternalConsumeRequest(models.Model):
             body=_('Request cancelled by %s') % self.env.user.name,
             message_type='notification',
             subtype_xmlid='mail.mt_note'
-        )
         )
 
     def action_set_to_draft(self):
