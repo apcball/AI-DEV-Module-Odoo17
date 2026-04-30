@@ -1,63 +1,83 @@
 # buz_retention
 
-Odoo 17 module for retention offset between a Vendor Bill and a Customer Invoice.
+Odoo 17 module for retention settlement between a Customer Invoice and one or more Vendor Bills.
 
 ## Purpose
 
 This module does **not** deduct retention from invoice lines.
-Instead, it:
+Instead, it works in two steps:
 
-1. Creates a retention vendor bill from the customer invoice, if needed.
-2. Later, applies that bill against a posted customer invoice.
-3. Creates a balancing journal entry and reconciles both sides.
+1. Create a retention vendor bill from a posted customer invoice.
+2. Apply posted retention bill(s) back to the customer invoice by creating a balancing journal entry and reconciling both sides.
 
-## Business Flow
+## How It Works
 
-- Create or post a vendor bill for the retention amount.
-- Open the customer invoice.
-- Select one or more posted retention bills.
-- Click **Apply Retention Bill**.
-- The system creates an offset journal entry:
-  - Dr Accounts Payable
-  - Cr Accounts Receivable
-- The payable line on each retention bill is reconciled.
-- The receivable line on the customer invoice is reconciled.
+### 1) Create Retention Bill
+From a posted customer invoice, click **Create Retention Bill**.
+The module will:
+
+- create a vendor bill in the same company
+- use the configured Retention Account on the bill line
+- post the bill automatically
+- link the new bill back to the customer invoice
+
+### 2) Apply Retention Bill
+Select one or more posted retention bills on the customer invoice, then click **Apply Retention Bill**.
+The module will:
+
+- create a balancing journal entry in the configured Retention Journal
+- debit Accounts Payable
+- credit Accounts Receivable
+- reconcile the vendor bill payable line(s)
+- reconcile the customer invoice receivable line
 
 ## Features
 
-- Customer invoice field for selecting retention bills
-- Create button on posted customer invoices
-- Apply button on posted customer invoices
-- Retention total display
-- Per-company retention journal setting
-- Per-company retention account setting
-- Journal entry creation and reconciliation
+- Create retention vendor bill from posted customer invoice
+- Select existing posted retention bills on invoice
+- Apply retention bill(s) with one click
+- Automatic journal entry creation
+- Automatic reconciliation on both payable and receivable sides
+- Per-company Retention Journal setting
+- Per-company Retention Account setting
 
 ## Settings
 
-Configure the **Retention Journal** and **Retention Account** in Accounting > Settings.
-The values are stored per company.
+Configure the following in **Accounting > Settings**:
 
-## Technical Notes
+- **Retention Journal**: general journal used for the offset entry
+- **Retention Account**: expense or clearing account used when creating the retention vendor bill
 
-- Depends on `account`
-- Uses standard Odoo models only
-- No core files are modified
-- V1 limitation: only company-currency invoices and vendor bills are supported
+Both settings are stored per company.
 
-## Install
+## Requirements
 
-1. Copy the module into the Odoo addons path.
-2. Update apps list.
+- Odoo 17
+- Module dependency: `account`
+
+## Limitations
+
+V1 supports only:
+
+- company-currency customer invoices
+- company-currency vendor bills
+- exact amount match between invoice residual and selected retention bill residual(s)
+- posted records only
+
+## Installation
+
+1. Copy the module into your Odoo addons path.
+2. Update the apps list.
 3. Install **Buz Retention**.
-4. Configure the Retention Journal and Retention Account in Accounting settings.
+4. Configure the retention settings in Accounting.
 
-## Usage
+## Usage Example
 
-1. Open the Customer Invoice.
-2. Click **Create Retention Bill** if you want the module to generate the vendor bill automatically.
+1. Open a posted customer invoice.
+2. Click **Create Retention Bill** if you want the module to generate the bill automatically.
 3. Or select an existing posted retention bill.
 4. Click **Apply Retention Bill**.
+5. Review the created offset journal entry and reconciliations.
 
 ## Module Structure
 
@@ -76,3 +96,9 @@ buz_retention/
 │   └── ir.model.access.csv
 └── README.md
 ```
+
+## Notes
+
+- No Odoo core files are modified.
+- The module uses standard Odoo accounting models and views.
+- If you need partial retention support or multi-currency support, that can be added in a later version.
