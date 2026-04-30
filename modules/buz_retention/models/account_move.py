@@ -50,6 +50,30 @@ class AccountMove(models.Model):
             ))
         return journal
 
+    def _get_retention_account(self):
+        self.ensure_one()
+        icp = self.env['ir.config_parameter'].sudo()
+        key = f'buz_retention.retention_account_id_{self.company_id.id}'
+        account_id = int(icp.get_param(key, default='0') or 0)
+        account = self.env['account.account'].browse(account_id).exists()
+        if not account:
+            raise UserError(_(
+                'Please configure a Retention Account in Accounting > Settings before creating retention bills.'
+            ))
+        return account
+
+    def _get_retention_purchase_journal(self):
+        self.ensure_one()
+        journal = self.env['account.journal'].search([
+            ('type', '=', 'purchase'),
+            ('company_id', '=', self.company_id.id),
+        ], limit=1)
+        if not journal:
+            raise UserError(_(
+                'Please create a Purchase Journal for company %(company)s before creating retention bills.'
+            ) % {'company': self.company_id.display_name})
+        return journal
+
     def _get_move_line(self, move, account_type):
         line = move.line_ids.filtered(
             lambda l: not l.display_type and l.account_id.account_type == account_type and not l.reconciled
@@ -142,6 +166,48 @@ class AccountMove(models.Model):
         if not offset_receivable:
             raise UserError(_('Could not find the offset receivable line for invoice %s.') % self.display_name)
         (invoice_receivable + offset_receivable).reconcile()
+
+    def action_create_retention_bill(self):
+        self.ensure_one()
+        if self.move_type != 'out_invoice':
+            raise UserError(_('Retention bills can only be created from customer invoices.'))
+        if self.state != 'posted':
+            raise UserError(_('Please post the customer invoice before creating a retention bill.'))
+        if self.retention_offset_move_id:
+            raise UserError(_('Retention has already been applied on this invoice.'))
+        if self.retention_bill_ids.filtered(lambda bill: bill.state == 'posted'):
+            raise UserError(_('This invoice already has a posted retention bill.'))
+        if float_compare(self.amount_residual, 0.0, precision_rounding=self.company_currency_id.rounding) <= 0:
+            raise UserError(_('The invoice residual must be greater than zero before creating a retention bill.'))
+
+        retention_account = self._get_retention_account()
+        journal = self._get_retention_purchase_journal()
+        bill_date = self.invoice_date or fields.Date.context_today(self)
+        bill = self.env['account.move'].create({
+            'move_type': 'in_invoice',
+            'partner_id': self.partner_id.id,
+            'company_id': self.company_id.id,
+            'journal_id': journal.id,
+            'invoice_date': bill_date,
+            'date': bill_date,
+            'ref': _('Retention bill for %s') % (self.name or self.ref or self.display_name),
+            'invoice_line_ids': [Command.create({
+                'name': _('Retention bill for %s') % (self.name or self.ref or self.display_name),
+                'account_id': retention_account.id,
+                'quantity': 1.0,
+                'price_unit': self.amount_residual,
+            })],
+        })
+        bill.action_post()
+        self.write({'retention_bill_ids': [Command.link(bill.id)]})
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Retention Vendor Bill'),
+            'res_model': 'account.move',
+            'res_id': bill.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
 
     def action_apply_retention_bill(self):
         self.ensure_one()
