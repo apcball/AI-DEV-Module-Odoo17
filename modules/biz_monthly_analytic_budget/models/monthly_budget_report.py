@@ -85,48 +85,34 @@ class MonthlyBudgetReport(models.Model):
 
                 UNION ALL
 
-                -- Actual entries (posted vendor bills / credit notes)
+                -- Used entries (monthly budget commitments in used state)
                 SELECT
                     'actual' as entry_type,
-                    am.name as name,
-                    (CASE WHEN am.move_type = 'in_refund'
-                          THEN -aml.price_subtotal
-                          ELSE  aml.price_subtotal END)
-                    * CAST(aml.analytic_distribution->>wbl.analytic_account_id::text AS numeric)
-                    / 100.0 as amount,
+                    COALESCE(bc.document_ref, bc.document_model || ':' || bc.document_id::text) as name,
+                    bc.amount as amount,
                     0.0 as budget_amt,
-                    (CASE WHEN am.move_type = 'in_refund'
-                          THEN -aml.price_subtotal
-                          ELSE  aml.price_subtotal END)
-                    * CAST(aml.analytic_distribution->>wbl.analytic_account_id::text AS numeric)
-                    / 100.0 as actual_amt,
-                    -((CASE WHEN am.move_type = 'in_refund'
-                            THEN -aml.price_subtotal
-                            ELSE  aml.price_subtotal END)
-                      * CAST(aml.analytic_distribution->>wbl.analytic_account_id::text AS numeric)
-                      / 100.0) as remaining_amt,
+                    bc.amount as actual_amt,
+                    -bc.amount as remaining_amt,
                     100.0 as utilization,
-                    COALESCE(am.invoice_date_due, am.invoice_date, aml.date) as date,
-                    am.company_id as company_id,
+                    bc.date as date,
+                    bc.company_id as company_id,
                     wbl.id as budget_line_id,
                     wbl.plan_id as plan_id,
                     wbl.analytic_account_id as analytic_account_id,
                     wbl.department_id as department_id,
                     wbl.project_id as project_id,
                     wbl.category as category
-                FROM account_move_line aml
-                JOIN account_move am ON aml.move_id = am.id
+                FROM budget_commitment bc
                 JOIN monthly_budget_plan wbp ON
-                    COALESCE(am.invoice_date_due, am.invoice_date, aml.date) >= wbp.date_from AND
-                    COALESCE(am.invoice_date_due, am.invoice_date, aml.date) <= wbp.date_to AND
-                    wbp.company_id = am.company_id AND
+                    bc.date >= wbp.date_from AND
+                    bc.date <= wbp.date_to AND
+                    wbp.company_id = bc.company_id AND
                     wbp.state = 'confirmed'
-                JOIN monthly_budget_line wbl ON wbl.plan_id = wbp.id
-                WHERE am.state = 'posted'
-                  AND am.move_type IN ('in_invoice', 'in_refund')
-                  AND aml.analytic_distribution IS NOT NULL
-                  AND jsonb_typeof(aml.analytic_distribution) = 'object'
-                  AND aml.analytic_distribution ? wbl.analytic_account_id::text
+                JOIN monthly_budget_line wbl ON
+                    wbl.plan_id = wbp.id AND
+                    wbl.analytic_account_id = bc.analytic_account_id
+                WHERE bc.budget_source = 'monthly'
+                  AND bc.state = 'used'
 
                 UNION ALL
 

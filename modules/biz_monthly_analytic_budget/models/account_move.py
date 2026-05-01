@@ -15,6 +15,13 @@ _logger = logging.getLogger(__name__)
 class AccountMove(models.Model):
     _inherit = 'account.move'
 
+    monthly_bill_due_date_from_po = fields.Boolean(
+        string='Bill Due Date Auto-filled from PO',
+        copy=False,
+        default=False,
+        readonly=True,
+    )
+
     @api.model_create_multi
     def create(self, vals_list):
         moves = super().create(vals_list)
@@ -23,8 +30,11 @@ class AccountMove(models.Model):
 
     def write(self, vals):
         prev_states = {rec.id: rec.state for rec in self}
+        if 'invoice_date_due' in vals and not self.env.context.get('skip_monthly_bill_budget_sync'):
+            vals = dict(vals)
+            vals['monthly_bill_due_date_from_po'] = False
         result = super().write(vals)
-        if any(key in vals for key in (
+        if not self.env.context.get('skip_monthly_bill_budget_sync') and any(key in vals for key in (
             'state',
             'invoice_date_due',
             'invoice_date',
@@ -64,6 +74,14 @@ class AccountMove(models.Model):
 
             source_po = move._get_related_purchase_order()
             if source_po:
+                po_target_date = move._get_purchase_order_target_date(source_po)
+                if move.state == 'draft' and po_target_date and (
+                    not move.invoice_date_due or move.monthly_bill_due_date_from_po
+                ):
+                    move.with_context(skip_monthly_bill_budget_sync=True).write({
+                        'invoice_date_due': po_target_date,
+                        'monthly_bill_due_date_from_po': True,
+                    })
                 # PO-linked bills already have their monthly budget consumed
                 # when the PO is confirmed. Keeping a second bill-level
                 # commitment here would double count the same spend.
@@ -119,20 +137,24 @@ class AccountMove(models.Model):
             ('requisition_order', '=', origin),
         ], limit=1)
 
+    def _get_purchase_order_target_date(self, source_po=None):
+        """Return the PO's expected payment date for budget alignment."""
+        self.ensure_one()
+        source_po = source_po or self._get_related_purchase_order()
+        if not source_po:
+            return False
+        return source_po.payment_date or (source_po.date_order.date() if source_po.date_order else False)
+
     def _get_bill_target_date(self):
         """Return the date used to match the bill against a budget plan."""
         self.ensure_one()
+        if self.invoice_date_due:
+            return self.invoice_date_due
+
         source_po = self._get_related_purchase_order()
         if source_po:
-            # Bills created from a PO should follow the PO budget month, not the
-            # bill's due date, otherwise the bill can land in a different plan.
-            po_target_date = source_po.payment_date or (source_po.date_order.date() if source_po.date_order else False)
-            if po_target_date:
-                return po_target_date
+            return self._get_purchase_order_target_date(source_po)
 
-        target_date = self.invoice_date_due or self.invoice_date or self.date
-        if target_date:
-            return target_date
         return False
 
     def _sync_monthly_bill_reservation(self, plan, analytic_totals, target_date):

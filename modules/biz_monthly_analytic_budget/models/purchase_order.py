@@ -146,13 +146,33 @@ class PurchaseOrder(models.Model):
         result = super().write(vals)
         if any(key in vals for key in ('state', 'payment_date', 'payment_date_manual', 'order_line', 'partner_id')):
             self._reserve_monthly_budget_for_direct_rfq()
+        if any(key in vals for key in ('payment_date', 'payment_date_manual', 'partner_id', 'order_line')):
+            self._sync_linked_vendor_bills()
         return result
 
-    @api.depends(
-        'order_line.price_subtotal',
-        'order_line.analytic_distribution',
-        'payment_date',
-    )
+    def _sync_linked_vendor_bills(self):
+        """Refresh linked vendor bills when the PO expected payment changes."""
+        AccountMove = self.env['account.move'].sudo()
+        for order in self:
+            bills = AccountMove.search([
+                ('move_type', 'in', ('in_invoice', 'in_refund')),
+                ('company_id', '=', order.company_id.id),
+                '|',
+                ('purchase_id', '=', order.id),
+                ('invoice_origin', '=', order.name),
+            ])
+            if not bills and hasattr(order, 'requisition_order') and order.requisition_order:
+                bills = AccountMove.search([
+                    ('move_type', 'in', ('in_invoice', 'in_refund')),
+                    ('company_id', '=', order.company_id.id),
+                    ('invoice_origin', '=', order.requisition_order),
+                ])
+            for bill in bills:
+                if bill._get_related_purchase_order() != order:
+                    continue
+                bill._sync_monthly_bill_budget()
+
+    @api.depends('order_line.price_subtotal', 'order_line.analytic_distribution', 'payment_date')
     def _compute_monthly_budget_check(self):
         for order in self:
             target_date = order.payment_date
